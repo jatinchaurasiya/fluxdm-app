@@ -1,0 +1,150 @@
+{
+    "sidebar": {
+        "dashboard": "Painel",
+        "automations": "Automações",
+        "calendar": "Calendário",
+        "scheduler": "Agendador",
+        "connect_social": "Conectar Social",
+        "settings": "Configurações"
+    },
+    "dashboard": {
+        "title": "Visão Geral",
+        "subtitle": "Acompanhe o desempenho da sua automação em tempo real.",
+        "stats": {
+            "sent": "Total de DMs Enviadas",
+            "leads": "Leads Capturados",
+            "queue": "Fila Pendente",
+            "conversion": "Taxa de Conversão"
+        },
+        "recent_activity": "Atividade Recente",
+        "active_automations": "Automações Recentes",
+        "engagement_trend": "Tendência de Engajamento",
+        "trend_desc": "Mensagens enviadas ao longo do tempo",
+        "logs": "Registros do Sistema",
+        "logs_header": {
+            "timestamp": "Horário",
+            "level": "Nível",
+            "message": "Mensagem"
+        }
+    },
+    "automations": {
+        "create_button": "Nova Automação",
+        "empty_title": "Nenhuma automação ainda",
+        "empty_desc": "Crie sua primeira automação para responder a comentários automaticamente.",
+        "delete_confirm": "Tem certeza de que deseja excluir esta automação?",
+        "deleted_success": "Excluído",
+        "edit_button": "Editar",
+        "status": {
+            "active": "ATIVO",
+            "paused": "PAUSADO"
+        },
+        "table": {
+            "name": "Nome",
+            "trigger": "Gatilho",
+            "status": "Status",
+            "actions": "Ações"
+        },
+        "wizard": {
+            "title": "Nova Automação",
+            "subtitle": "Crie um novo fluxo de trabalho",
+            "step_1": "Gatilho",
+            "step_2": "Mensagem e Lógica",
+            "step_3": "Revisar",
+            "next": "Próximo",
+            "previous": "Voltar",
+            "finish": "Lançar Automação",
+            "smart_follow_gate": "Filtro de Seguidor Inteligente",
+            "enable_gate": "Ativar Filtro de Seguidor",
+            "gate_desc": "Envie recompensas apenas para usuários que seguem você.",
+            "step_1_title": "Quando isso deve rodar?",
+            "step_1_desc": "Escolha o evento que aciona este fluxo.",
+            "trigger_post_comment": "Comentário no Post",
+            "trigger_story_reply": "Resposta ao Story",
+            "trigger_keyword_label": "Qual palavra-chave?",
+            "step_2_title": "Sequência de Seguidor",
+            "step_2_desc": "Projete o fluxo de conversa.",
+            "hook_section": "O Gancho",
+            "gatekeeper_section": "O Porteiro",
+            "payload_section": "A Recompensa",
+            "step_3_title": "Toques Finais",
+            "step_3_desc": "Configurações avançadas antes do lançamento.",
+            "launch_button": "Lançar Automação"
+        }
+    },
+    "scheduler": {
+        "title": "Agendador de Postagens",
+        "subtitle": "Planeje seu conteúdo em vários formatos.",
+        "drag_drop": "Arraste o vídeo aqui",
+        "caption_placeholder": "Escreva uma legenda cativante...",
+        "schedule_button": "Agendar Post",
+        "upload_button": "Enviar Mídia",
+        "caption_label": "Legenda",
+        "date_label": "Data do Agendamento",
+        "automation_label": "Vincular Automação",
+        "select_flow": "Selecione um fluxo...",
+        "automation_helper": "O fluxo selecionado será acionado por palavras-chave nos comentários.",
+        "upcoming_queue": "Fila Próxima",
+        "empty_title": "Nenhum conteúdo agendado",
+        "empty_desc": "Arraste um vídeo acima para agendar seu primeiro post!",
+        "details_label": "Detalhes do {{type}}",
+        "no_flows": "Nenhum fluxo encontrado",
+        "types": {
+            "REEL": "Reel",
+            "IMAGE": "Imagem",
+            "CAROUSEL": "Carrossel",
+            "STORY": "Story"
+        }
+    },
+    "settings": {
+        "title": "Configurações",
+        "description": "Gerencie as preferências e controles de segurança.",
+        "general": "Geral",
+        "safety": "Segurança",
+        "system": "Sistema e Dados",
+        "tabs": {
+            "general": "Geral",
+            "safety": "Segurança",
+            "system": "Sistema"
+        },
+        "language": "Idioma",
+        "dark_mode": "Modo Escuro",
+        "launch_startup": "Iniciar no Login",
+        "replay_tour": "Repetir Tour",
+        "accent_color": "Cor de Destaque",
+        "save": "Salvar Alterações",
+        "export_leads": "Exportar Leads",
+        "factory_reset": "Reset de Fábrica",
+        "anti_ban": "Proteção Anti-Ban",
+        "safe_mode": "Modo Seguro Humano",
+        "reply_delay": "Atraso Mínimo de Resposta",
+        "blacklist": "Lista Negra de Usuários",
+        "appearance": "Aparência e Inicialização",
+        "appearance_desc": "Personalize o visual do FluxDM.",
+        "data_management": "Gerenciamento de Dados",
+        "data_desc": "Exporte seus dados ou gerencie o estado do sistema."
+    },
+    "connect_social": {
+        "title": "Conectar Social",
+        "description": "Conecte suas contas de mídia social para ativar a automação.",
+        "connect_fb": "Conectar com Facebook",
+        "status_connected": "Conectado como {{user}}",
+        "status_not_connected": "Não Conectado",
+        "disclaimer": "Isso abrirá uma janela do navegador para autorizar o FluxDM. Precisamos de permissões para gerenciar mensagens e comentários.",
+        "troubleshooting": {
+            "title": "Não vê sua conta do Instagram?",
+            "step1": "1. Abra o Instagram no seu celular.",
+            "step2": "2. Vá em Editar Perfil > Informações Comerciais Públicas.",
+            "step3": "3. Toque em Página e conecte uma Página do Facebook existente ou crie uma nova.",
+            "step4": "4. Volte aqui e tente fazer login novamente."
+        },
+        "error_browser": "Você está no Modo Navegador. Por favor, abra o App Desktop FluxDM para conectar.",
+        "error_bridge": "Erro Fatal: Ponte de Desktop Quebrada."
+    },
+    "calendar": {
+        "title": "Calendário de Conteúdo",
+        "subtitle": "Veja suas postagens agendadas",
+        "today": "Hoje",
+        "new_event": "Novo Evento",
+        "more_events": "+ {{count}} mais"
+    }
+}

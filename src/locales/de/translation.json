@@ -1,0 +1,150 @@
+{
+    "sidebar": {
+        "dashboard": "Dashboard",
+        "automations": "Automatisierungen",
+        "calendar": "Kalender",
+        "scheduler": "Planer",
+        "connect_social": "Social Verbinden",
+        "settings": "Einstellungen"
+    },
+    "dashboard": {
+        "title": "Übersicht",
+        "subtitle": "Verfolgen Sie Ihre Automatisierungsleistung in Echtzeit.",
+        "stats": {
+            "sent": "Gesendete DMs",
+            "leads": "Erfasste Leads",
+            "queue": "Warteschlange",
+            "conversion": "Konversionsrate"
+        },
+        "recent_activity": "Letzte Aktivitäten",
+        "active_automations": "Aktuelle Automatisierungen",
+        "engagement_trend": "Engagement-Trend",
+        "trend_desc": "Gesendete Nachrichten im Zeitverlauf",
+        "logs": "Systemprotokolle",
+        "logs_header": {
+            "timestamp": "Zeitstempel",
+            "level": "Ebene",
+            "message": "Nachricht"
+        }
+    },
+    "automations": {
+        "create_button": "Neue Automatisierung",
+        "empty_title": "Noch keine Automatisierungen",
+        "empty_desc": "Erstellen Sie Ihre erste Automatisierung, um Kommentare automatisch zu beantworten.",
+        "delete_confirm": "Sind Sie sicher, dass Sie diese Automatisierung löschen möchten?",
+        "deleted_success": "Gelöscht",
+        "edit_button": "Bearbeiten",
+        "status": {
+            "active": "AKTIV",
+            "paused": "PAUSIERT"
+        },
+        "table": {
+            "name": "Name",
+            "trigger": "Auslöser",
+            "status": "Status",
+            "actions": "Aktionen"
+        },
+        "wizard": {
+            "title": "Neue Automatisierung",
+            "subtitle": "Erstellen Sie einen neuen Workflow",
+            "step_1": "Auslöser",
+            "step_2": "Nachricht & Logik",
+            "step_3": "Überprüfen",
+            "next": "Weiter",
+            "previous": "Zurück",
+            "finish": "Starten",
+            "smart_follow_gate": "Intelligenter Follow-Filter",
+            "enable_gate": "Follow-Filter aktivieren",
+            "gate_desc": "Belohnungen nur an Nutzer senden, die Ihnen folgen.",
+            "step_1_title": "Wann soll dies laufen?",
+            "step_1_desc": "Wählen Sie das Ereignis, das diesen Ablauf auslöst.",
+            "trigger_post_comment": "Post-Kommentar",
+            "trigger_story_reply": "Story-Antwort",
+            "trigger_keyword_label": "Welches Stichwort?",
+            "step_2_title": "Follow-Sequenz",
+            "step_2_desc": "Gestalten Sie den Gesprächsverlauf.",
+            "hook_section": "Der Aufhänger",
+            "gatekeeper_section": "Der Türsteher",
+            "payload_section": "Die Belohnung",
+            "step_3_title": "Feinschliff",
+            "step_3_desc": "Erweiterte Einstellungen vor dem Start.",
+            "launch_button": "Starten"
+        }
+    },
+    "scheduler": {
+        "title": "Post-Planer",
+        "subtitle": "Planen Sie Ihre Inhalte formatübergreifend.",
+        "drag_drop": "Video hierher ziehen",
+        "caption_placeholder": "Schreiben Sie eine eingängige Bildunterschrift...",
+        "schedule_button": "Post planen",
+        "upload_button": "Medien hochladen",
+        "caption_label": "Bildunterschrift",
+        "date_label": "Planungsdatum",
+        "automation_label": "Automatisierung verknüpfen",
+        "select_flow": "Workflow wählen...",
+        "automation_helper": "Der gewählte Ablauf wird durch Stichworte in Kommentaren ausgelöst.",
+        "upcoming_queue": "Kommende Warteschlange",
+        "empty_title": "Kein Inhalt geplant",
+        "empty_desc": "Ziehen Sie ein Video nach oben, um Ihren ersten Post zu planen!",
+        "details_label": "{{type}}-Details",
+        "no_flows": "Keine Workflows gefunden",
+        "types": {
+            "REEL": "Reel",
+            "IMAGE": "Bild",
+            "CAROUSEL": "Karussell",
+            "STORY": "Story"
+        }
+    },
+    "settings": {
+        "title": "Einstellungen",
+        "description": "Verwalten Sie Ihre Anwendungseinstellungen und Sicherheitskontrollen.",
+        "general": "Allgemein",
+        "safety": "Sicherheit",
+        "system": "System & Daten",
+        "tabs": {
+            "general": "Allgemein",
+            "safety": "Sicherheit",
+            "system": "System"
+        },
+        "language": "Sprache",
+        "dark_mode": "Dunkelmodus",
+        "launch_startup": "Beim Start öffnen",
+        "replay_tour": "Tour wiederholen",
+        "accent_color": "Akzentfarbe",
+        "save": "Änderungen speichern",
+        "export_leads": "Leads exportieren",
+        "factory_reset": "Werkseinstellungen",
+        "anti_ban": "Anti-Ban-Schutz",
+        "safe_mode": "Sicherer Modus",
+        "reply_delay": "Minimale Antwortverzögerung",
+        "blacklist": "Gesperrte Benutzernamen",
+        "appearance": "Aussehen & Start",
+        "appearance_desc": "Passen Sie das Aussehen von FluxDM an.",
+        "data_management": "Datenverwaltung",
+        "data_desc": "Exportieren Sie Ihre Daten oder verwalten Sie den Systemstatus."
+    },
+    "connect_social": {
+        "title": "Social Verbinden",
+        "description": "Verbinden Sie Ihre Social-Media-Konten, um die Automatisierung zu aktivieren.",
+        "connect_fb": "Mit Facebook verbinden",
+        "status_connected": "Verbunden als {{user}}",
+        "status_not_connected": "Nicht verbunden",
+        "disclaimer": "Dies öffnet ein Browserfenster zur Autorisierung von FluxDM. Wir benötigen Berechtigungen zum Verwalten von Nachrichten.",
+        "troubleshooting": {
+            "title": "Sehen Sie Ihr Instagram-Konto nicht?",
+            "step1": "1. Öffnen Sie Instagram auf Ihrem Handy.",
+            "step2": "2. Gehen Sie zu Profil bearbeiten > Öffentliche Unternehmensinfos.",
+            "step3": "3. Tippen Sie auf Seite und verbinden Sie eine bestehende Facebook-Seite.",
+            "step4": "4. Kommen Sie hierher zurück und versuchen Sie es erneut."
+        },
+        "error_browser": "Sie sind im Browser-Modus. Bitte öffnen Sie die FluxDM Desktop-App.",
+        "error_bridge": "Schwerwiegender Fehler: Desktop-Bridge defekt."
+    },
+    "calendar": {
+        "title": "Inhaltskalender",
+        "subtitle": "Geplante Posts ansehen",
+        "today": "Heute",
+        "new_event": "Neues Ereignis",
+        "more_events": "+ {{count}} mehr"
+    }
+}

@@ -1,0 +1,188 @@
+{
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "automations": "Automations",
+    "calendar": "Calendar",
+    "scheduler": "Scheduler",
+    "connect_social": "Connect Social",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "subtitle": "Track your automation performance in real-time.",
+    "stats": {
+      "sent": "Total DMs Sent",
+      "leads": "Leads Captured",
+      "queue": "Pending Queue",
+      "conversion": "Conversion Rate"
+    },
+    "recent_activity": "Recent Activity",
+    "active_automations": "Recent automations",
+    "engagement_trend": "Engagement Trend",
+    "trend_desc": "Messages sent over time",
+    "logs": "Recent System Logs",
+    "logs_header": {
+      "timestamp": "Timestamp",
+      "level": "Level",
+      "message": "Message"
+    },
+    "trends": {
+      "calculating": "Calculating...",
+      "default_vs_last": "0% vs last period",
+      "default_today": "0 today",
+      "processing": "Processing...",
+      "based_on_replies": "Based on replies"
+    },
+    "footer": {
+      "system_online": "System Online"
+    }
+  },
+  "automations": {
+    "create_button": "New Automation",
+    "empty_title": "No Automations Yet",
+    "empty_desc": "Create your first automation to start replying to comments automatically.",
+    "delete_confirm": "Are you sure you want to delete this automation?",
+    "deleted_success": "Deleted",
+    "edit_button": "Edit",
+    "status": {
+      "active": "ACTIVE",
+      "paused": "PAUSED"
+    },
+    "table": {
+      "name": "Name",
+      "trigger": "Trigger",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "wizard": {
+      "title": "New Automation",
+      "subtitle": "Create a new automation workflow",
+      "step_1": "Trigger",
+      "step_2": "Message & Logic",
+      "step_3": "Review",
+      "next": "Next Step",
+      "previous": "Back",
+      "finish": "Launch Automation",
+      "smart_follow_gate": "Smart Follow Gate",
+      "enable_gate": "Enable Follow Gate",
+      "gate_desc": "Only send rewards to users who follow you.",
+      "step_1_title": "When should this automation run?",
+      "step_1_desc": "Choose the event that triggers this flow.",
+      "trigger_post_comment": "Post Comment",
+      "trigger_story_reply": "Story Reply",
+      "trigger_keyword_label": "Which Keyword?",
+      "step_2_title": "Smart Follow Sequence",
+      "step_2_desc": "Design the conversation flow.",
+      "hook_section": "The Hook",
+      "gatekeeper_section": "The Gatekeeper",
+      "payload_section": "The Payload",
+      "step_3_title": "Final Touches",
+      "step_3_desc": "Advanced settings before launch.",
+      "launch_button": "Launch Automation"
+    }
+  },
+  "scheduler": {
+    "title": "Post Scheduler",
+    "subtitle": "Plan your content logic across formats.",
+    "drag_drop": "Drag video here",
+    "caption_placeholder": "Write a catchy caption...",
+    "schedule_button": "Schedule Post",
+    "upload_button": "Upload Media",
+    "caption_label": "Caption",
+    "date_label": "Schedule Date",
+    "automation_label": "Link Automation",
+    "select_flow": "Select a flow...",
+    "automation_helper": "The selected flow will be triggered by keywords in comments.",
+    "upcoming_queue": "Upcoming Queue",
+    "empty_title": "No content scheduled",
+    "empty_desc": "Drag a video above to schedule your first post!",
+    "details_label": "{{type}} Details",
+    "no_flows": "No automation flows found",
+    "types": {
+      "REEL": "Reel",
+      "IMAGE": "Post",
+      "CAROUSEL": "Carousel",
+      "STORY": "Story"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage your application preferences and safety controls.",
+    "general": "General",
+    "safety": "Automation Safety",
+    "system": "Data & System",
+    "tabs": {
+      "general": "General",
+      "safety": "Automation Safety",
+      "system": "Data & System"
+    },
+    "language": "Language / Sprache / Idioma",
+    "dark_mode": "Dark Mode",
+    "launch_startup": "Launch on Startup",
+    "replay_tour": "Replay Tour",
+    "accent_color": "Accent Color",
+    "save": "Save Changes",
+    "export_leads": "Export All Leads",
+    "factory_reset": "Factory Reset",
+    "anti_ban": "Anti-Ban Protection",
+    "safe_mode": "Human Safe Mode",
+    "reply_delay": "Minimum Reply Delay",
+    "blacklist": "Blacklisted Usernames",
+    "appearance": "Appearance & Startup",
+    "appearance_desc": "Customize how FluxDM looks and feels.",
+    "data_management": "Data Management",
+    "data_desc": "Export your data or manage system state."
+  },
+  "connect_social": {
+    "title": "Connect Social",
+    "description": "Connect your social media accounts to enable automation.",
+    "connect_fb": "Connect with Facebook",
+    "status_connected": "Connected as {{user}}",
+    "status_not_connected": "Not Connected",
+    "disclaimer": "This will open a browser window to authorize FluxDM. We require permissions to manage messages and comments.",
+    "troubleshooting": {
+      "title": "Don't see your Instagram account?",
+      "step1": "1. Open Instagram on your phone.",
+      "step2": "2. Go to Edit Profile > Public Business Info.",
+      "step3": "3. Tap Page and connect an existing Facebook Page or create a new one.",
+      "step4": "4. Come back here and try logging in again."
+    },
+    "error_browser": "You are in Browser Mode. Please open the FluxDM Desktop App to connect.",
+    "error_bridge": "Fatal Error: Desktop Bridge Broken."
+  },
+  "calendar": {
+    "title": "Content Calendar",
+    "subtitle": "View your scheduled posts",
+    "today": "Today",
+    "new_event": "Schedule Content",
+    "more_events": "+ {{count}} more",
+    "manage_content": "Manage Content",
+    "schedule_content": "Schedule Content",
+    "metrics": {
+      "accountibility": "Accountability Metrics",
+      "total_scheduled": "Total Scheduled",
+      "upcoming": "Upcoming",
+      "published": "Published",
+      "failed": "Failed"
+    },
+    "sidebar": {
+      "upcoming_queue": "Upcoming Queue",
+      "recent_automations": "Recent Automations",
+      "no_upcoming": "No content upcoming",
+      "select_date": "Select a date on the calendar to schedule.",
+      "no_automations": "No automations found. Create one in the Builder!"
+    },
+    "automation": {
+      "manage_title": "Manage Automation",
+      "name_label": "Automation Name",
+      "keyword_label": "Trigger Keyword",
+      "reply_label": "Reply Message",
+      "delete_button": "Delete",
+      "cancel_button": "Cancel",
+      "save_button": "Save Changes",
+      "saving_button": "Saving...",
+      "visual_warning": "This is a Visual Flow. Please use the Visual Builder for complex edits.",
+      "visual_warning_desc": "Only metadata (Name/Trigger) can be edited here."
+    }
+  }
+}

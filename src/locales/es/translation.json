@@ -1,0 +1,150 @@
+{
+    "sidebar": {
+        "dashboard": "Panel",
+        "automations": "Automatizaciones",
+        "calendar": "Calendario",
+        "scheduler": "Programador",
+        "connect_social": "Conectar Social",
+        "settings": "Ajustes"
+    },
+    "dashboard": {
+        "title": "Resumen",
+        "subtitle": "Rastrea el rendimiento de tu automatización en tiempo real.",
+        "stats": {
+            "sent": "Total DMs Enviados",
+            "leads": "Leads Capturados",
+            "queue": "Cola Pendiente",
+            "conversion": "Tasa de Conversión"
+        },
+        "recent_activity": "Actividad Reciente",
+        "active_automations": "Automatizaciones Recientes",
+        "engagement_trend": "Tendencia de Interacción",
+        "trend_desc": "Mensajes enviados a lo largo del tiempo",
+        "logs": "Registros del Sistema",
+        "logs_header": {
+            "timestamp": "Hora",
+            "level": "Nivel",
+            "message": "Mensaje"
+        }
+    },
+    "automations": {
+        "create_button": "Nueva Automatización",
+        "empty_title": "Aún no hay automatizaciones",
+        "empty_desc": "Crea tu primera automatización para responder comentarios automáticamente.",
+        "delete_confirm": "¿Estás seguro de que quieres eliminar esta automatización?",
+        "deleted_success": "Eliminado",
+        "edit_button": "Editar",
+        "status": {
+            "active": "ACTIVO",
+            "paused": "PAUSADO"
+        },
+        "table": {
+            "name": "Nombre",
+            "trigger": "Disparador",
+            "status": "Estado",
+            "actions": "Acciones"
+        },
+        "wizard": {
+            "title": "Nueva Automatización",
+            "subtitle": "Crea un nuevo flujo de trabajo",
+            "step_1": "Disparador",
+            "step_2": "Mensaje y Lógica",
+            "step_3": "Revisar",
+            "next": "Siguiente",
+            "previous": "Atrás",
+            "finish": "Lanzar Automatización",
+            "smart_follow_gate": "Filtro de Seguimiento Inteligente",
+            "enable_gate": "Habilitar Filtro de Seguimiento",
+            "gate_desc": "Solo enviar recompensas a usuarios que te siguen.",
+            "step_1_title": "¿Cuándo debe ejecutarse?",
+            "step_1_desc": "Elige el evento que dispara este flujo.",
+            "trigger_post_comment": "Comentario en Post",
+            "trigger_story_reply": "Respuesta a Historia",
+            "trigger_keyword_label": "¿Qué palabra clave?",
+            "step_2_title": "Secuencia de Seguimiento",
+            "step_2_desc": "Diseña el flujo de conversación.",
+            "hook_section": "El Gancho",
+            "gatekeeper_section": "El Portero",
+            "payload_section": "La Recompensa",
+            "step_3_title": "Toques Finales",
+            "step_3_desc": "Configuración avanzada antes del lanzamiento.",
+            "launch_button": "Lanzar Automatización"
+        }
+    },
+    "scheduler": {
+        "title": "Programador de Posts",
+        "subtitle": "Planifica tu contenido en varios formatos.",
+        "drag_drop": "Arrastra el video aquí",
+        "caption_placeholder": "Escribe un pie de foto llamativo...",
+        "schedule_button": "Programar Post",
+        "upload_button": "Subir Medios",
+        "caption_label": "Pie de foto",
+        "date_label": "Fecha de Programación",
+        "automation_label": "Vincular Automatización",
+        "select_flow": "Selecciona un flujo...",
+        "automation_helper": "El flujo seleccionado se activará con palabras clave en los comentarios.",
+        "upcoming_queue": "Cola Próxima",
+        "empty_title": "Sin contenido programado",
+        "empty_desc": "¡Arrastra un video arriba para programar tu primer post!",
+        "details_label": "Detalles de {{type}}",
+        "no_flows": "No se encontraron flujos",
+        "types": {
+            "REEL": "Reel",
+            "IMAGE": "Imagen",
+            "CAROUSEL": "Carrusel",
+            "STORY": "Historia"
+        }
+    },
+    "settings": {
+        "title": "Ajustes",
+        "description": "Administra las preferencias y controles de seguridad.",
+        "general": "General",
+        "safety": "Seguridad",
+        "system": "Sistema y Datos",
+        "tabs": {
+            "general": "General",
+            "safety": "Seguridad",
+            "system": "Sistema"
+        },
+        "language": "Idioma",
+        "dark_mode": "Modo Oscuro",
+        "launch_startup": "Iniciar al arrancar",
+        "replay_tour": "Repetir Tour",
+        "accent_color": "Color de Acento",
+        "save": "Guardar Cambios",
+        "export_leads": "Exportar Leads",
+        "factory_reset": "Restaurar de Fábrica",
+        "anti_ban": "Protección Anti-Ban",
+        "safe_mode": "Modo Seguro Humano",
+        "reply_delay": "Retraso Mínimo de Respuesta",
+        "blacklist": "Lista Negra de Usuarios",
+        "appearance": "Apariencia e Inicio",
+        "appearance_desc": "Personaliza cómo se ve FluxDM.",
+        "data_management": "Gestión de Datos",
+        "data_desc": "Exporta tus datos o gestiona el estado del sistema."
+    },
+    "connect_social": {
+        "title": "Conectar Social",
+        "description": "Conecta tus cuentas de redes sociales para habilitar la automatización.",
+        "connect_fb": "Conectar con Facebook",
+        "status_connected": "Conectado como {{user}}",
+        "status_not_connected": "No Conectado",
+        "disclaimer": "Esto abrirá una ventana del navegador para autorizar FluxDM. Requerimos permisos para gestionar mensajes y comentarios.",
+        "troubleshooting": {
+            "title": "¿No ves tu cuenta de Instagram?",
+            "step1": "1. Abre Instagram en tu teléfono.",
+            "step2": "2. Ve a Editar Perfil > Información Pública de Negocio.",
+            "step3": "3. Toca Página y conecta una Página de Facebook existente o crea una nueva.",
+            "step4": "4. Vuelve aquí e intenta iniciar sesión de nuevo."
+        },
+        "error_browser": "Estás en Modo Navegador. Por favor abre la App de Escritorio FluxDM para conectar.",
+        "error_bridge": "Error Fatal: Puente de Escritorio Roto."
+    },
+    "calendar": {
+        "title": "Calendario de Contenidos",
+        "subtitle": "Ver tus posts programados",
+        "today": "Hoy",
+        "new_event": "Nuevo Evento",
+        "more_events": "+ {{count}} más"
+    }
+}
