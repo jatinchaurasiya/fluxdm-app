@@ -4,6 +4,7 @@ import Settings from './pages/Settings';
 import Scheduler from './pages/Scheduler';
 import CalendarPage from './pages/Calendar';
 import AutomationWizard from './pages/AutomationWizard';
+import Automations from './pages/Automations';
 import ConnectSocial from './pages/ConnectSocial';
 import Sidebar, { MobileMenuButton } from './components/Sidebar';
 import AppLayout from './components/layout/AppLayout';
@@ -35,7 +36,9 @@ function App() {
       case 'dashboard':
         return <Dashboard onNavigate={setCurrentPage} />;
       case 'automations':
-        return <AutomationWizard />;
+        return <Automations onNavigate={setCurrentPage} />;
+      case 'automation-wizard':
+        return <AutomationWizard onNavigate={setCurrentPage} />;
       case 'scheduler':
         return <Scheduler />;
       case 'calendar':

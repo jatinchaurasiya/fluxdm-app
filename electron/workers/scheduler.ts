@@ -58,8 +58,22 @@ async function processJob(job: ScheduledPost, config: any) {
     const { meta_access_token, instagram_business_id } = config;
 
 
-    // 1. Create
-    const containerId = await createContainer(instagram_business_id, job.file_path, job.caption, meta_access_token);
+    // 1. Create - Handle File Path Parsing
+    let videoUrl = job.file_path;
+    try {
+        // Paths are stored as JSON strings in DB (e.g. "[\"url\"]" or "url")
+        const parsed = JSON.parse(job.file_path);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            videoUrl = parsed[0];
+        } else if (typeof parsed === 'string') {
+            videoUrl = parsed;
+        }
+    } catch (e) {
+        // If not JSON, assume it's a raw string
+        videoUrl = job.file_path;
+    }
+
+    const containerId = await createContainer(instagram_business_id, videoUrl, job.caption, meta_access_token);
     if (!containerId) {
         db.prepare("UPDATE scheduled_posts SET status = 'FAILED' WHERE id = ?").run(job.id);
         return;

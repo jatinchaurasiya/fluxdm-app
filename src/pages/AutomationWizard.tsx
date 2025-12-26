@@ -11,10 +11,16 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { AutomationSuccessDialog } from '@/components/automations/AutomationSuccessDialog';
 
-export default function AutomationWizard() {
+interface AutomationWizardProps {
+    onNavigate?: (page: string) => void;
+}
+
+export default function AutomationWizard({ onNavigate }: AutomationWizardProps) {
     const { t } = useTranslation();
     const [step, setStep] = useState(1);
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -43,6 +49,14 @@ export default function AutomationWizard() {
     const prevStep = () => setStep(prev => prev - 1);
 
     const [loading, setLoading] = useState(false);
+
+    const handleNavigate = (page: string) => {
+        if (onNavigate) {
+            onNavigate(page);
+        } else {
+            window.location.hash = `#/${page}`;
+        }
+    };
 
     const handleLaunch = async () => {
         setLoading(true);
@@ -78,9 +92,7 @@ export default function AutomationWizard() {
                 const res = await window.ipcRenderer.invoke('save-flow', automationData);
 
                 if (res.success) {
-                    toast.success("Automation Active");
-                    // Reset or Redirect
-                    window.location.hash = '#/automations';
+                    setShowSuccessDialog(true);
                 } else {
                     toast.error("Failed to save: " + res.error);
                 }
@@ -456,6 +468,29 @@ export default function AutomationWizard() {
                     </div>
                 )}
             </div>
+
+            <AutomationSuccessDialog
+                open={showSuccessDialog}
+                onOpenChange={setShowSuccessDialog}
+                onViewAutomations={() => handleNavigate('automations')}
+                onCreateAnother={() => {
+                    setShowSuccessDialog(false);
+                    setStep(1);
+                    setFormData({
+                        triggerType: 'POST_COMMENT',
+                        triggerKeyword: '',
+                        publicReply: '',
+                        hookText: '',
+                        verificationKeyword: 'READY',
+                        isFollowGated: false,
+                        gateText: 'I checked, but you aren\'t following yet! Please follow and reply READY again.',
+                        rewardText: 'Thanks for following! Here is your link:',
+                        rewardLink: '',
+                        emailGate: false,
+                        smartRewind: false
+                    });
+                }}
+            />
         </div>
     );
 }
