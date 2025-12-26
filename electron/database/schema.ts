@@ -167,5 +167,17 @@ export const initDB = () => {
     )
   `).run();
 
+  // 8. Performance Indexes
+  // Message Queue: Critical for dashboard stats and polling
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_status ON message_queue(status)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_execute_at ON message_queue(execute_at)`).run();
+
+  // Scheduled Posts: Critical for scheduler polling
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_sp_status ON scheduled_posts(status)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_sp_publish_at ON scheduled_posts(publish_at)`).run();
+
+  // Automations: Critical for engine lookups
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_af_active ON automation_flows(is_active)`).run();
+
   console.log('✅ Database Schema & Migrations Applied.');
 };

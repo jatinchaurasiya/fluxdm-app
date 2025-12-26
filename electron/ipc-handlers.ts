@@ -618,4 +618,18 @@ export function registerIpcHandlers() {
             return { success: false, error: error.message };
         }
     });
+
+    // ------------------------------------------------------------------------
+    // 🧪 DEBUG / DEMO Handlers
+    // ------------------------------------------------------------------------
+    ipcMain.handle('seed-demo-data', async (_event, { stressTest } = { stressTest: false }) => {
+        try {
+            const { seedDemoData } = require('./database/seed-demo');
+            seedDemoData(stressTest);
+            return { success: true };
+        } catch (error: any) {
+            console.error('❌ Seed Error:', error);
+            return { success: false, error: error.message };
+        }
+    });
 }
