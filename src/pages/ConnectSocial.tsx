@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Facebook, ShieldCheck, ShieldAlert, ArrowRight, Plus } from 'lucide-react';
+import { Facebook, ShieldCheck, ShieldAlert, ArrowRight, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from 'sonner';
 import {
     Accordion,
@@ -12,28 +13,44 @@ import {
 } from "@/components/ui/accordion";
 import { useTranslation } from 'react-i18next';
 
+interface Account {
+    id: number;
+    username: string;
+    profile_picture_url: string;
+    instagram_business_id: string;
+    is_active: number;
+}
+
 export default function ConnectSocial() {
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
     const [pageName, setPageName] = useState('');
+    const [isConnected, setIsConnected] = useState(false); // Refers to ACTIVE account
+    const [accounts, setAccounts] = useState<Account[]>([]);
     const [accordionValue, setAccordionValue] = useState("");
 
     useEffect(() => {
-        checkStatus();
+        loadAccounts();
     }, []);
 
-    const checkStatus = async () => {
+    const loadAccounts = async () => {
         try {
             // @ts-ignore
             if (window.ipcRenderer) {
                 // @ts-ignore
-                const res = await window.ipcRenderer.invoke('get-user-profile');
-                if (res?.success && res.data) {
-                    setIsConnected(true);
-                    setPageName(res.data.name || 'Connected Account');
-                } else {
-                    setIsConnected(false);
+                const res = await window.ipcRenderer.invoke('get-accounts');
+                if (res?.success) {
+                    setAccounts(res.data);
+                    const activeId = res.activeId;
+                    const activeAccount = res.data.find((a: Account) => a.id === activeId);
+
+                    if (activeAccount) {
+                        setIsConnected(true);
+                        setPageName(activeAccount.username);
+                    } else {
+                        setIsConnected(false);
+                        setPageName('');
+                    }
                 }
             }
         } catch (e) {
@@ -51,6 +68,9 @@ export default function ConnectSocial() {
 
                 if (res?.success) {
                     toast.success('Instagram Connected Successfully');
+                    // Reload accounts instead of window reload for smoother UX, 
+                    // though window reload might be safer for global state (like sidebar).
+                    // For now, let's reload window to ensure everything syncs.
                     setTimeout(() => window.location.reload(), 1500);
                 } else {
                     const errorMsg = res?.error || 'Unknown error';
@@ -70,9 +90,27 @@ export default function ConnectSocial() {
         }
     };
 
+    const handleDisconnect = async (id: number) => {
+        if (!confirm(t('connect_social.disconnect_confirm'))) return;
+
+        try {
+            // @ts-ignore
+            const res = await window.ipcRenderer.invoke('delete-account', id);
+            if (res.success) {
+                toast.success(t('connect_social.account_disconnected'));
+                // Reload to update state everywhere
+                window.location.reload();
+            } else {
+                toast.error(t('connect_social.disconnect_failed') + res.error);
+            }
+        } catch (e) {
+            toast.error("Error: " + e);
+        }
+    };
+
     return (
-        <div className="p-8 max-w-5xl mx-auto h-full flex items-center justify-center bg-gray-50 dark:bg-black">
-            <Card className="w-full max-w-lg shadow-2xl border-0 ring-1 ring-gray-200 dark:ring-zinc-800 dark:bg-zinc-900">
+        <div className="p-8 max-w-5xl mx-auto h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-black overflow-y-auto">
+            <Card className="w-full max-w-lg shadow-2xl border-0 ring-1 ring-gray-200 dark:ring-zinc-800 dark:bg-zinc-900 mb-8">
                 <CardHeader className="text-center pt-10 pb-2">
                     <div className="mx-auto bg-blue-600 p-4 rounded-full mb-6 w-fit shadow-lg shadow-blue-900/20">
                         <Facebook className="w-10 h-10 text-white" />
@@ -107,11 +145,10 @@ export default function ConnectSocial() {
                             className="w-full h-14 text-lg font-bold bg-[#1877F2] hover:bg-[#166fe5] text-white shadow-lg transition-all dark:ring-2 dark:ring-blue-900/20"
                             onClick={handleConnect}
                             disabled={loading}
-                            isLoading={loading}
                         >
                             {loading ? (
                                 'Connecting...'
-                            ) : isConnected ? (
+                            ) : accounts.length > 0 ? (
                                 <>
                                     <Plus className="w-5 h-5 mr-3" />
                                     Connect Another Account
@@ -124,6 +161,46 @@ export default function ConnectSocial() {
                                 </>
                             )}
                         </Button>
+
+                        {/* Connected Accounts List */}
+                        {accounts.length > 0 && (
+                            <div className="mt-8">
+                                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-3 uppercase tracking-wide">
+                                    {t('connect_social.connected_accounts_title')}
+                                </h3>
+                                <div className="space-y-3">
+                                    {accounts.map((acc) => (
+                                        <div
+                                            key={acc.id}
+                                            className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-800"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="w-10 h-10 border border-gray-200 dark:border-zinc-700">
+                                                    <AvatarImage src={acc.profile_picture_url} />
+                                                    <AvatarFallback>{acc.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+                                                </Avatar>
+                                                <div className="text-left">
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                        {acc.username}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {acc.instagram_business_id ? t('connect_social.account_type_instagram') : t('connect_social.account_type_facebook')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                onClick={() => handleDisconnect(acc.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Troubleshooting Accordion */}
                         <Accordion

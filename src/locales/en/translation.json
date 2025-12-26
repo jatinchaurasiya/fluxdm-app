@@ -148,7 +148,13 @@
       "step4": "4. Come back here and try logging in again."
     },
     "error_browser": "You are in Browser Mode. Please open the FluxDM Desktop App to connect.",
-    "error_bridge": "Fatal Error: Desktop Bridge Broken."
+    "error_bridge": "Fatal Error: Desktop Bridge Broken.",
+    "connected_accounts_title": "Connected Accounts",
+    "disconnect_confirm": "Are you sure you want to disconnect this account?",
+    "account_disconnected": "Account disconnected.",
+    "disconnect_failed": "Failed to disconnect: ",
+    "account_type_instagram": "Instagram",
+    "account_type_facebook": "Facebook Page"
   },
   "calendar": {
     "title": "Content Calendar",

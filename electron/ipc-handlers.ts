@@ -112,6 +112,26 @@ export function registerIpcHandlers() {
         }
     });
 
+    ipcMain.handle('delete-account', async (_event, accountId) => {
+        try {
+            const config = db.prepare('SELECT active_account_id FROM user_config LIMIT 1').get() as any;
+
+            // Delete the account
+            db.prepare('DELETE FROM accounts WHERE id = ?').run(accountId);
+
+            // If we deleted the active account, switch to another one or null
+            if (config?.active_account_id === accountId) {
+                const otherAccount = db.prepare('SELECT id FROM accounts ORDER BY created_at DESC LIMIT 1').get() as any;
+                const newActiveId = otherAccount ? otherAccount.id : null;
+                db.prepare('UPDATE user_config SET active_account_id = ? WHERE id = (SELECT id FROM user_config LIMIT 1)').run(newActiveId);
+            }
+
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
     // ------------------------------------------------------------------------
     // 🧠 AUTOMATION FLOWS (Visual Builder)
     // ------------------------------------------------------------------------
