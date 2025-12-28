@@ -37,9 +37,18 @@ jobs:
         run: |
           npx electron-builder --publish always
 
+      - name: Debug Output
+        if: always()
+        run: |
+          ls -R
+          ls -R dist || true
+
       - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-build-artifacts
-          path: release/
+          path: |
+            dist/**/*.exe
+            dist/**/*.dmg
+            dist/**/*.AppImage
