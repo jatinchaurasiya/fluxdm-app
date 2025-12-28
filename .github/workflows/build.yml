@@ -1,32 +1,35 @@
-name: Build FluxDM Multi-Platform
+name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # This triggers the build when you push a tag like v1.0.0
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        # This tells GitHub to run on all three operating systems at once
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
 
     steps:
-      - name: Check out Git repository
+      - name: Checkout git repo
         uses: actions/checkout@v4
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build and Release
-        uses: samuelmeuli/action-electron-builder@v1
-        with:
-          # This creates a GitHub Release and uploads the .exe and .dmg
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          release: true
+      - name: Build and Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run build -- --publish always
