@@ -1,7 +1,7 @@
 {
   "name": "fluxdm-app",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Automate your Instagram DMs",
   "author": "FluxDM Team",
   "repository": {
@@ -21,7 +21,7 @@
     "appId": "com.fluxdm.app",
     "productName": "FluxDM",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "linux": {
       "target": [
