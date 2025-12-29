@@ -179,5 +179,9 @@ export const initDB = () => {
   // Automations: Critical for engine lookups
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_af_active ON automation_flows(is_active)`).run();
 
+  // Performance Indexes (Scaling)
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)`).run();
+
   console.log('✅ Database Schema & Migrations Applied.');
 };

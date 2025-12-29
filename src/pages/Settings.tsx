@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { AlertCircle, Download, RefreshCw, Shield, Database, Trash2, Zap } from 'lucide-react';
+import { AlertCircle, Download, RefreshCw, Shield, Database, Trash2 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { useTranslation } from 'react-i18next';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -98,28 +98,7 @@ export default function SettingsPage() {
         window.location.reload();
     };
 
-    const [seeding, setSeeding] = useState(false);
 
-    const handleSeedData = async (stressTest: boolean) => {
-        setSeeding(true);
-        try {
-            // @ts-ignore
-            if (window.ipcRenderer) {
-                // @ts-ignore
-                const res = await window.ipcRenderer.invoke('seed-demo-data', { stressTest });
-                if (res.success) {
-                    toast.success(stressTest ? 'Stress Test Data Loaded (50k msgs)' : 'Demo Data Loaded');
-                    window.location.reload();
-                } else {
-                    toast.error('Seeding Failed: ' + res.error);
-                }
-            }
-        } catch (e: any) {
-            toast.error(e.message);
-        } finally {
-            setSeeding(false);
-        }
-    };
 
     return (
 
@@ -322,38 +301,7 @@ export default function SettingsPage() {
                                 </Button>
                             </div>
 
-                            {/* Load Demo Data (Stress Test) */}
-                            <div className="flex items-center justify-between p-4 border rounded-lg bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2 bg-white dark:bg-zinc-900 rounded-md border shadow-sm dark:border-zinc-800">
-                                        <Zap className="h-6 w-6 text-orange-500" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="font-medium dark:text-white">Load Demo Data & Stress Test</p>
-                                        <p className="text-sm text-gray-500 dark:text-zinc-400">Generate mock data for testing performance.</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => handleSeedData(false)}
-                                        disabled={seeding}
-                                        className="dark:bg-zinc-950"
-                                    >
-                                        <Database className="w-4 h-4 mr-2" />
-                                        Demo Data
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        className="text-orange-600 border-orange-200 dark:bg-zinc-950"
-                                        onClick={() => handleSeedData(true)}
-                                        disabled={seeding}
-                                    >
-                                        <Zap className="w-4 h-4 mr-2" />
-                                        50k Msg Stress Test
-                                    </Button>
-                                </div>
-                            </div>
+
 
 
                             {/* Factory Reset */}

@@ -100,7 +100,7 @@ function createWindow() {
     autoHideMenuBar: true, // Hide default menu in production
     webPreferences: {
       preload: preloadPath,
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
     }
