@@ -16,7 +16,16 @@ export function registerIpcHandlers() {
     ipcMain.handle('start-oauth-flow', async (_event, _appId: string) => {
         try {
             console.log("🚀 Starting OAuth Flow...");
-            const token = await startOAuthServer();
+
+            // Check for Custom Meta Keys
+            const user = db.prepare('SELECT settings FROM user_config LIMIT 1').get() as any;
+            const settings = user && user.settings ? JSON.parse(user.settings) : {};
+            const metaConfig = settings.meta_config || {};
+
+            const customAppId = metaConfig.appId;
+            const customAppSecret = metaConfig.appSecret;
+
+            const token = await startOAuthServer(customAppId, customAppSecret);
 
             // 🪟 Bring App to Foreground
             const wins = BrowserWindow.getAllWindows();

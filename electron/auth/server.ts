@@ -27,7 +27,7 @@ let server: Server | null = null;
  * 8. Shows success page to user
  * 9. Resolves promise so the desktop app can update UI
  */
-export function startOAuthServer(): Promise<string> {
+export function startOAuthServer(customAppId?: string, customAppSecret?: string): Promise<string> {
     return new Promise((resolve, reject) => {
         // Close any existing server instance
         if (server) {
@@ -72,10 +72,15 @@ export function startOAuthServer(): Promise<string> {
                 console.log('📥 Received authorization code, exchanging for token...');
 
                 // STEP 1: Exchange authorization code for short-lived token
+                const appIdToUse = customAppId || META_CONFIG.appId;
+                const appSecretToUse = customAppSecret || APP_SECRET;
+
+                console.log(`🔑 Using App ID: ${appIdToUse} (Custom: ${!!customAppId})`);
+
                 const shortTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
                     params: {
-                        client_id: META_CONFIG.appId,
-                        client_secret: APP_SECRET,
+                        client_id: appIdToUse,
+                        client_secret: appSecretToUse,
                         redirect_uri: REDIRECT_URI,
                         code: code
                     }
@@ -93,8 +98,8 @@ export function startOAuthServer(): Promise<string> {
                 const longTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
                     params: {
                         grant_type: 'fb_exchange_token',
-                        client_id: META_CONFIG.appId,
-                        client_secret: APP_SECRET,
+                        client_id: appIdToUse,
+                        client_secret: appSecretToUse,
                         fb_exchange_token: shortLivedToken
                     }
                 });
@@ -269,7 +274,8 @@ export function startOAuthServer(): Promise<string> {
             console.log(`🔐 OAuth server started on http://localhost:${PORT}`);
 
             // Build the OAuth URL
-            const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_CONFIG.appId}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}`;
+            const appIdToUse = customAppId || META_CONFIG.appId;
+            const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appIdToUse}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}`;
 
             console.log(`🌐 Opening browser for OAuth: ${authUrl}`);
 

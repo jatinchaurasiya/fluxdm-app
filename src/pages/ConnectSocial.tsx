@@ -12,6 +12,9 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Eye, EyeOff, Save, Key, Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface Account {
@@ -30,9 +33,35 @@ export default function ConnectSocial() {
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [accordionValue, setAccordionValue] = useState("");
 
+    // Developer Settings State
+    const [customAppId, setCustomAppId] = useState('');
+    const [customAppSecret, setCustomAppSecret] = useState('');
+    const [customGraphApiKey, setCustomGraphApiKey] = useState('');
+    const [showSecret, setShowSecret] = useState(false);
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+
     useEffect(() => {
         loadAccounts();
+        loadSettings();
     }, []);
+
+    const loadSettings = async () => {
+        try {
+            // @ts-ignore
+            if (window.ipcRenderer) {
+                // @ts-ignore
+                const res = await window.ipcRenderer.invoke('get-settings');
+                if (res?.success) {
+                    const metaConfig = res.data.meta_config || {};
+                    setCustomAppId(metaConfig.appId || '');
+                    setCustomAppSecret(metaConfig.appSecret || '');
+                    setCustomGraphApiKey(metaConfig.graphApiKey || '');
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load settings", e);
+        }
+    };
 
     const loadAccounts = async () => {
         try {
@@ -106,6 +135,34 @@ export default function ConnectSocial() {
             }
         } catch (e) {
             toast.error("Error: " + e);
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        setIsSavingSettings(true);
+        try {
+            // @ts-ignore
+            if (window.ipcRenderer) {
+                // @ts-ignore
+                const res = await window.ipcRenderer.invoke('save-setting', {
+                    key: 'meta_config',
+                    value: {
+                        appId: customAppId,
+                        appSecret: customAppSecret,
+                        graphApiKey: customGraphApiKey
+                    }
+                });
+
+                if (res.success) {
+                    toast.success(t('connect_social.developer_settings.saved_success'));
+                } else {
+                    toast.error(t('connect_social.developer_settings.save_error'));
+                }
+            }
+        } catch (e) {
+            toast.error("Error saving settings");
+        } finally {
+            setIsSavingSettings(false);
         }
     };
 
@@ -220,6 +277,134 @@ export default function ConnectSocial() {
                                     <p>{t('connect_social.troubleshooting.step2')}</p>
                                     <p>{t('connect_social.troubleshooting.step3')}</p>
                                     <p>{t('connect_social.troubleshooting.step4')}</p>
+                                </AccordionContent>
+                            </AccordionItem>
+
+                            {/* Developer Settings & Tutorial */}
+                            <AccordionItem value="item-2" className="border-b-0 border-t border-gray-200 dark:border-zinc-700">
+                                <AccordionTrigger className="text-sm font-medium text-gray-700 dark:text-zinc-300 hover:no-underline py-4">
+                                    <div className="flex items-center gap-2">
+                                        <Key className="w-4 h-4 text-purple-500" />
+                                        <span>Developer Settings & Custom API Key</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="text-sm text-gray-600 dark:text-zinc-400 space-y-6 pb-6 px-1">
+
+                                    <div className="space-y-4 border p-4 rounded-lg bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
+                                        <div className="space-y-1">
+                                            <h4 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                <Key className="w-3 h-3" /> Custom Meta App Config
+                                            </h4>
+                                            <p className="text-xs text-gray-500">
+                                                Use your own Meta App ID and Secret for full control. Leave blank to use default FluxDM keys.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="space-y-1">
+                                                <Label htmlFor="appId" className="text-xs">Meta App ID</Label>
+                                                <Input
+                                                    id="appId"
+                                                    placeholder="Enter your App ID"
+                                                    value={customAppId}
+                                                    onChange={(e) => setCustomAppId(e.target.value)}
+                                                    className="h-9 bg-gray-50 dark:bg-zinc-800"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <Label htmlFor="appSecret" className="text-xs">{t('connect_social.developer_settings.app_secret_label')} Key</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        id="appSecret"
+                                                        type={showSecret ? "text" : "password"}
+                                                        placeholder={t('connect_social.developer_settings.app_secret_placeholder')}
+                                                        value={customAppSecret}
+                                                        onChange={(e) => setCustomAppSecret(e.target.value)}
+                                                        className="h-9 pr-10 bg-gray-50 dark:bg-zinc-800"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowSecret(!showSecret)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                                    >
+                                                        {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <Label htmlFor="graphApiKey" className="text-xs">{t('connect_social.developer_settings.graph_api_key_label')}</Label>
+                                                <Input
+                                                    id="graphApiKey"
+                                                    type="password"
+                                                    placeholder={t('connect_social.developer_settings.graph_api_key_placeholder')}
+                                                    value={customGraphApiKey}
+                                                    onChange={(e) => setCustomGraphApiKey(e.target.value)}
+                                                    className="h-9 bg-gray-50 dark:bg-zinc-800"
+                                                />
+                                            </div>
+
+                                            <Button
+                                                onClick={handleSaveSettings}
+                                                disabled={isSavingSettings}
+                                                size="sm"
+                                                className="w-full mt-2"
+                                                variant="outline"
+                                            >
+                                                {isSavingSettings ? t('connect_social.developer_settings.saving') : (
+                                                    <>
+                                                        <Save className="w-3 h-3 mr-2" />
+                                                        {t('connect_social.developer_settings.save_button')}
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pt-2">
+                                        <h4 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                            <Video className="w-4 h-4 text-red-500" />
+                                            {t('connect_social.developer_settings.how_to_title')}
+                                        </h4>
+                                        <p className="text-xs text-gray-500">
+                                            {t('connect_social.developer_settings.how_to_desc')}
+                                        </p>
+
+                                        <div className="relative w-full rounded-lg overflow-hidden shadow-md aspect-video bg-black">
+                                            <iframe
+                                                width="100%"
+                                                height="100%"
+                                                src="https://www.youtube.com/embed/BuF9g9_QC04?si=qTx8fGoeNnZ7D1Mn"
+                                                title="YouTube video player"
+                                                frameBorder="0"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                allowFullScreen
+                                            ></iframe>
+                                        </div>
+
+                                        <div className="flex justify-between items-center px-1">
+                                            <a
+                                                href="https://youtu.be/BuF9g9_QC04?si=qTx8fGoeNnZ7D1Mn"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-red-600 hover:underline flex items-center gap-1"
+                                            >
+                                                <Video className="w-3 h-3" />
+                                                {t('connect_social.developer_settings.watch_on_youtube')}
+                                            </a>
+
+                                            <a
+                                                href="https://developers.facebook.com/apps/"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-blue-600 hover:underline"
+                                            >
+                                                {t('connect_social.developer_settings.meta_dev_link')}
+                                            </a>
+                                        </div>
+                                    </div>
+
                                 </AccordionContent>
                             </AccordionItem>
                         </Accordion>
