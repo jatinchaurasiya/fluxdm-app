@@ -45,6 +45,17 @@ export const initDB = () => {
   addColumnSafe('user_config', 'settings', 'TEXT'); // stores JSON of general prefs, safety settings, etc.
   addColumnSafe('user_config', 'active_account_id', 'INTEGER');
 
+  // Licensing & Multi-Device Anti-Exploitation Columns
+  addColumnSafe('user_config', 'is_licensed', 'BOOLEAN DEFAULT 0');
+  addColumnSafe('user_config', 'license_session_id', 'TEXT');
+  addColumnSafe('user_config', 'license_signature', 'TEXT');
+  addColumnSafe('user_config', 'license_email', 'TEXT');
+  addColumnSafe('user_config', 'licensed_at', 'DATETIME');
+  addColumnSafe('user_config', 'device_hardware_id', 'TEXT');
+  addColumnSafe('user_config', 'paired_device_id', 'TEXT');
+  addColumnSafe('user_config', 'node_role', "TEXT DEFAULT 'master_laptop'");
+  addColumnSafe('user_config', 'last_heartbeat', 'DATETIME');
+
   // 1.5 Accounts Table (Multi-Account Support)
   db.prepare(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -57,6 +68,19 @@ export const initDB = () => {
       profile_picture_url TEXT,
       is_active BOOLEAN DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+
+  // 1.8 Device Seats Table (Strict 2-Seat Policy: 1 Computer + 1 Mobile Device)
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS device_seats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_hardware_id TEXT UNIQUE,
+      device_name TEXT,
+      device_type TEXT, -- 'desktop' | 'mobile'
+      is_active BOOLEAN DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
 
@@ -91,6 +115,7 @@ export const initDB = () => {
   db.prepare(`
     CREATE TABLE IF NOT EXISTS automation_flows (
       id TEXT PRIMARY KEY,
+      account_id INTEGER,
       name TEXT,
       is_active INTEGER DEFAULT 1,
       trigger_type TEXT DEFAULT 'KEYWORD',
@@ -102,11 +127,13 @@ export const initDB = () => {
     )
   `).run();
   addColumnSafe('automation_flows', 'trigger_type', 'TEXT');
+  addColumnSafe('automation_flows', 'account_id', 'INTEGER');
 
   // 3. Scheduled Posts
   db.prepare(`
     CREATE TABLE IF NOT EXISTS scheduled_posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       file_path TEXT,
       caption TEXT,
       publish_at DATETIME,
@@ -116,11 +143,13 @@ export const initDB = () => {
     )
   `).run();
   addColumnSafe('scheduled_posts', 'media_type', 'TEXT');
+  addColumnSafe('scheduled_posts', 'account_id', 'INTEGER');
 
   // 4. Leads
   db.prepare(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       username TEXT,
       email TEXT,
       phone TEXT,
@@ -128,11 +157,13 @@ export const initDB = () => {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  addColumnSafe('leads', 'account_id', 'INTEGER');
 
   // 5. Message Queue
   db.prepare(`
     CREATE TABLE IF NOT EXISTS message_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       recipient_id TEXT,
       status TEXT DEFAULT 'PENDING',
       payload_json TEXT,
@@ -147,41 +178,50 @@ export const initDB = () => {
   `).run();
   addColumnSafe('message_queue', 'payload_json', 'TEXT');
   addColumnSafe('message_queue', 'execute_at', 'DATETIME');
+  addColumnSafe('message_queue', 'account_id', 'INTEGER');
 
   // 6. Conversation State (Engine Dependency)
   db.prepare(`
     CREATE TABLE IF NOT EXISTS conversation_state (
       user_id TEXT PRIMARY KEY,
+      account_id INTEGER,
       state TEXT DEFAULT 'NONE', 
       last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  addColumnSafe('conversation_state', 'account_id', 'INTEGER');
 
   // 7. Logs (Dashboard Dependency)
   db.prepare(`
     CREATE TABLE IF NOT EXISTS logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER,
       level TEXT DEFAULT 'INFO',
       message TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  addColumnSafe('logs', 'account_id', 'INTEGER');
 
   // 8. Performance Indexes
   // Message Queue: Critical for dashboard stats and polling
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_status ON message_queue(status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_execute_at ON message_queue(execute_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_account ON message_queue(account_id)`).run();
 
   // Scheduled Posts: Critical for scheduler polling
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_sp_status ON scheduled_posts(status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_sp_publish_at ON scheduled_posts(publish_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_sp_account ON scheduled_posts(account_id)`).run();
 
   // Automations: Critical for engine lookups
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_af_active ON automation_flows(is_active)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_af_account ON automation_flows(account_id)`).run();
 
   // Performance Indexes (Scaling)
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)`).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_leads_account ON leads(account_id)`).run();
 
   console.log('✅ Database Schema & Migrations Applied.');
 };

@@ -1,1 +1,4 @@
-export const APP_SECRET = 'dde5808c060f40136b95f87d91e6ef37';
+import dotenv from 'dotenv';
+dotenv.config();
+
+export const APP_SECRET = process.env.META_APP_SECRET || '';

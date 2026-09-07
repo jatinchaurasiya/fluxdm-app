@@ -1,4 +1,4 @@
-import { LayoutDashboard, GitBranch, Settings, Zap, X, Menu, Calendar as CalendarIcon, Clock, Link } from 'lucide-react';
+import { LayoutDashboard, GitBranch, Settings, Zap, X, Menu, Calendar as CalendarIcon, Clock, Link, Smartphone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface SidebarProps {
@@ -6,6 +6,7 @@ interface SidebarProps {
     onNavigate: (page: string) => void;
     isOpen: boolean;
     onClose: () => void;
+    onOpenPairing?: () => void;
 }
 
 interface NavItem {
@@ -16,7 +17,7 @@ interface NavItem {
 
 import { AccountSwitcher } from './layout/AccountSwitcher';
 
-export default function Sidebar({ currentPage, onNavigate, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, isOpen, onClose, onOpenPairing }: SidebarProps) {
     const { t } = useTranslation();
 
     const navItems: NavItem[] = [
@@ -24,11 +25,17 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, onClose }: Si
         { id: 'automations', label: t('sidebar.automations'), icon: <GitBranch className="w-5 h-5" /> },
         { id: 'calendar', label: t('sidebar.calendar'), icon: <CalendarIcon className="w-5 h-5" /> },
         { id: 'scheduler', label: t('sidebar.scheduler'), icon: <Clock className="w-5 h-5" /> },
+        { id: 'pairing', label: 'Pair Mobile', icon: <Smartphone className="w-5 h-5" /> },
         { id: 'connect-social', label: t('sidebar.connect_social'), icon: <Link className="w-5 h-5" /> },
         { id: 'settings', label: t('sidebar.settings'), icon: <Settings className="w-5 h-5" /> },
     ];
 
     const handleNavigate = (pageId: string) => {
+        if (pageId === 'pairing') {
+            if (onOpenPairing) onOpenPairing();
+            onClose();
+            return;
+        }
         onNavigate(pageId);
         onClose(); // Close sidebar on mobile after navigation
     };

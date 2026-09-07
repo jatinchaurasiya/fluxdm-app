@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import {
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { AutomationSuccessDialog } from '@/components/automations/AutomationSuccessDialog';
+import MediaPicker from '@/components/instagram/MediaPicker';
 
 interface AutomationWizardProps {
     onNavigate?: (page: string) => void;
@@ -21,12 +22,15 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
     const { t } = useTranslation();
     const [step, setStep] = useState(1);
     const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState({
         triggerType: 'POST_COMMENT', // 'POST_COMMENT' | 'STORY_REPLY'
         triggerKeyword: '',
         publicReply: '',
+        attachedMediaId: null as string | null,
+        targetPostMode: 'ALL' as 'ALL' | 'SPECIFIC',
 
         // Smart Follow Gate Fields
         hookText: '',
@@ -40,6 +44,35 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
         emailGate: false,
         smartRewind: false
     });
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem('edit_automation_flow');
+            if (raw) {
+                const flow = JSON.parse(raw);
+                setEditingId(flow.id);
+                const cfg = typeof flow.nodes_json === 'string' ? JSON.parse(flow.nodes_json || '{}') : (flow.nodes_json || {});
+                setFormData({
+                    triggerType: flow.trigger_type || 'POST_COMMENT',
+                    triggerKeyword: flow.trigger_keyword || '',
+                    publicReply: flow.reply_text || '',
+                    attachedMediaId: flow.attached_media_id || null,
+                    targetPostMode: flow.attached_media_id ? 'SPECIFIC' : 'ALL',
+                    hookText: cfg.hook_text || '',
+                    verificationKeyword: cfg.verification_keyword || 'READY',
+                    isFollowGated: Boolean(cfg.is_follow_gated),
+                    gateText: cfg.gate_text || 'Please follow and reply READY again.',
+                    rewardText: cfg.reward_text || 'Thanks for following! Here is your link:',
+                    rewardLink: cfg.reward_link || '',
+                    emailGate: Boolean(cfg.settings?.emailCollect),
+                    smartRewind: Boolean(cfg.settings?.smartRewind)
+                });
+                sessionStorage.removeItem('edit_automation_flow');
+            }
+        } catch (e) {
+            console.error('Failed to parse flow for editing:', e);
+        }
+    }, []);
 
     const updateForm = (key: string, value: any) => {
         setFormData(prev => ({ ...prev, [key]: value }));
@@ -62,9 +95,11 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
         setLoading(true);
         // Construct clean JSON object matching backend expectations
         const automationData = {
+            id: editingId || undefined,
             name: formData.triggerKeyword ? `Keyword: ${formData.triggerKeyword}` : `New Automation ${new Date().toLocaleDateString()}`,
             trigger_type: formData.triggerType || 'POST_COMMENT',
             trigger_keyword: formData.triggerKeyword,
+            attached_media_id: formData.targetPostMode === 'SPECIFIC' ? formData.attachedMediaId : null,
 
             // Standard/Legacy fields just in case
             reply_text: formData.publicReply, // Public reply
@@ -189,6 +224,44 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
                                         className="h-12 text-lg dark:bg-zinc-800 dark:border-zinc-700 dark:text-white"
                                     />
                                     <p className="text-xs text-gray-500 dark:text-zinc-500">Leave empty to match ALL comments/replies.</p>
+                                </div>
+
+                                {/* Target Post/Reel Selector */}
+                                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-zinc-800">
+                                    <Label className="text-sm font-semibold dark:text-white">Target Post or Reel</Label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => updateForm('targetPostMode', 'ALL')}
+                                            className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                                                formData.targetPostMode === 'ALL'
+                                                    ? 'border-black bg-gray-50 text-black dark:border-white dark:bg-zinc-800 dark:text-white font-semibold'
+                                                    : 'border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-zinc-400'
+                                            }`}
+                                        >
+                                            All Current & Future Posts
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateForm('targetPostMode', 'SPECIFIC')}
+                                            className={`flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                                                formData.targetPostMode === 'SPECIFIC'
+                                                    ? 'border-black bg-gray-50 text-black dark:border-white dark:bg-zinc-800 dark:text-white font-semibold'
+                                                    : 'border-gray-200 dark:border-zinc-800 text-gray-500 dark:text-zinc-400'
+                                            }`}
+                                        >
+                                            Select Specific Post / Reel
+                                        </button>
+                                    </div>
+
+                                    {formData.targetPostMode === 'SPECIFIC' && (
+                                        <div className="p-3 bg-gray-50 dark:bg-zinc-800/40 rounded-xl border border-gray-200 dark:border-zinc-800 mt-2">
+                                            <MediaPicker
+                                                selectedId={formData.attachedMediaId}
+                                                onSelect={(id) => updateForm('attachedMediaId', id)}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                         </div>
@@ -480,6 +553,8 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
                         triggerType: 'POST_COMMENT',
                         triggerKeyword: '',
                         publicReply: '',
+                        attachedMediaId: null,
+                        targetPostMode: 'ALL',
                         hookText: '',
                         verificationKeyword: 'READY',
                         isFollowGated: false,

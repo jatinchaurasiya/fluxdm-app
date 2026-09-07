@@ -1,0 +1,12 @@
+name = "fluxdm-relay"
+main = "worker.ts"
+compatibility_date = "2024-04-01"
+
+# Cloudflare KV for flow caching and offline leads
+[[kv_namespaces]]
+binding = "FLUXDM_KV"
+id = "fluxdm_kv_production"
+preview_id = "fluxdm_kv_preview"
+
+[vars]
+META_VERIFY_TOKEN = "fluxdm_webhook_verify_token_secure"

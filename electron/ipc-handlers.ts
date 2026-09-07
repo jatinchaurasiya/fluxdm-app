@@ -5,6 +5,20 @@ import axios from 'axios';
 import db from './database/db';
 import { randomUUID } from 'crypto';
 import { startOAuthServer } from './auth/server';
+import { 
+    getDeviceHardwareId, 
+    verifyLicenseSignature, 
+    getActiveDeviceSeats, 
+    deauthorizeSeat, 
+    generatePairingCode, 
+    redeemPairingCode 
+} from './licensing/auth';
+import { 
+    createCheckoutSession, 
+    verifyAndActivateSession, 
+    requestPurchaseRestoreOtp, 
+    verifyPurchaseRestoreOtp 
+} from './licensing/dodo';
 
 // ------------------------------------------------------------------------
 // 🔐 AUTH & API HANDLERS
@@ -13,19 +27,37 @@ export function registerIpcHandlers() {
 
     // ... (existing handlers)
 
-    ipcMain.handle('start-oauth-flow', async (_event, _appId: string) => {
+    ipcMain.handle('start-oauth-flow', async (_event, optionsOrAppId?: any) => {
         try {
-            console.log("🚀 Starting OAuth Flow...");
+            console.log("🚀 Starting OAuth Flow...", optionsOrAppId);
+
+            let mode: 'instagram' | 'facebook' = 'instagram';
+            let explicitAppId: string | undefined;
+
+            if (typeof optionsOrAppId === 'object' && optionsOrAppId !== null) {
+                mode = optionsOrAppId.mode || 'instagram';
+                explicitAppId = optionsOrAppId.appId;
+            } else if (typeof optionsOrAppId === 'string' && optionsOrAppId) {
+                if (optionsOrAppId === 'instagram' || optionsOrAppId === 'facebook') {
+                    mode = optionsOrAppId;
+                } else {
+                    explicitAppId = optionsOrAppId;
+                }
+            }
 
             // Check for Custom Meta Keys
             const user = db.prepare('SELECT settings FROM user_config LIMIT 1').get() as any;
             const settings = user && user.settings ? JSON.parse(user.settings) : {};
             const metaConfig = settings.meta_config || {};
 
-            const customAppId = metaConfig.appId;
+            const customAppId = explicitAppId || metaConfig.appId;
             const customAppSecret = metaConfig.appSecret;
 
-            const token = await startOAuthServer(customAppId, customAppSecret);
+            const token = await startOAuthServer({
+                customAppId,
+                customAppSecret,
+                mode
+            });
 
             // 🪟 Bring App to Foreground
             const wins = BrowserWindow.getAllWindows();
@@ -518,8 +550,19 @@ export function registerIpcHandlers() {
 
 
     ipcMain.handle('open-external-url', async (_event, url) => {
-        await shell.openExternal(url);
-        return { success: true };
+        try {
+            if (!url || typeof url !== 'string') {
+                return { success: false, error: 'Invalid URL provided' };
+            }
+            const parsed = new URL(url);
+            if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+                return { success: false, error: `Disallowed protocol: ${parsed.protocol}` };
+            }
+            await shell.openExternal(url);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('verify-connection', async () => {
@@ -628,5 +671,85 @@ export function registerIpcHandlers() {
         }
     });
 
+    // ------------------------------------------------------------------------
+    // 💳 LICENSING, ANTI-EXPLOITATION & PAIRING HANDLERS
+    // ------------------------------------------------------------------------
+    ipcMain.handle('licensing:get-status', async () => {
+        try {
+            const config = db.prepare('SELECT is_licensed, license_session_id, license_signature, license_email, licensed_at, device_hardware_id FROM user_config LIMIT 1').get() as any;
+            const currentHardwareId = getDeviceHardwareId();
+            const seats = getActiveDeviceSeats();
 
+            if (!config || !config.is_licensed) {
+                return {
+                    isLicensed: false,
+                    hardwareId: currentHardwareId,
+                    seats
+                };
+            }
+
+            // Verify tamper-proof HMAC signature
+            const isSignatureValid = verifyLicenseSignature(
+                config.license_session_id || '',
+                config.device_hardware_id || currentHardwareId,
+                config.license_email || '',
+                config.license_signature || ''
+            );
+
+            if (!isSignatureValid) {
+                console.warn('⚠️ Tamper detected: License signature mismatch. Reverting to trial.');
+                db.prepare('UPDATE user_config SET is_licensed = 0 WHERE id = (SELECT id FROM user_config LIMIT 1)').run();
+                return {
+                    isLicensed: false,
+                    error: 'Tamper detected: License state invalidated.',
+                    hardwareId: currentHardwareId,
+                    seats
+                };
+            }
+
+            return {
+                isLicensed: true,
+                email: config.license_email,
+                licensedAt: config.licensed_at,
+                sessionId: config.license_session_id,
+                hardwareId: currentHardwareId,
+                seats
+            };
+        } catch (error: any) {
+            console.error('Error getting licensing status:', error);
+            return { isLicensed: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('licensing:create-checkout', async (_event, { email } = {}) => {
+        return await createCheckoutSession(email);
+    });
+
+    ipcMain.handle('licensing:verify-session', async (_event, { sessionId }) => {
+        return await verifyAndActivateSession(sessionId);
+    });
+
+    ipcMain.handle('licensing:request-email-otp', async (_event, { email }) => {
+        return await requestPurchaseRestoreOtp(email);
+    });
+
+    ipcMain.handle('licensing:verify-email-otp', async (_event, { email, code }) => {
+        return await verifyPurchaseRestoreOtp(email, code);
+    });
+
+    ipcMain.handle('licensing:get-device-seats', async () => {
+        return { success: true, seats: getActiveDeviceSeats() };
+    });
+
+    ipcMain.handle('licensing:deauthorize-seat', async (_event, { seatId }) => {
+        return deauthorizeSeat(seatId);
+    });
+
+    ipcMain.handle('licensing:generate-pairing-code', async () => {
+        return { success: true, ...generatePairingCode() };
+    });
+
+    ipcMain.handle('licensing:redeem-pairing-code', async (_event, { pin, deviceType, deviceName }) => {
+        return redeemPairingCode(pin, deviceType, deviceName);
+    });
 }

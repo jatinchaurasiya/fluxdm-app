@@ -18,6 +18,7 @@ const __dirname = path.dirname(__filename);
 let mainWindow: any = null;
 let tray: any = null;
 let isQuitting = false;
+let pendingDeepLinkUrl: string | null = null;
 
 // ✅ Single Instance Lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -31,15 +32,61 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient('fluxdm');
 }
 
-if (!gotTheLock) {
-  app.quit();
-} else {
-  // Second Instance Behavior
-  app.on('second-instance', () => {
+async function handleDeepLink(rawUrl: string) {
+  try {
+    console.log('🔗 Handling deep link:', rawUrl);
+    if (!rawUrl || !rawUrl.startsWith('fluxdm:')) return;
+
+    // Normalizing URL for standard URL parser (e.g. fluxdm://payment-success?session_id=... -> https://fluxdm.app/payment-success?...)
+    const urlObj = new URL(rawUrl.replace('fluxdm://', 'https://fluxdm.app/'));
+    const action = urlObj.pathname.replace('/', '') || urlObj.host;
+
+    if (action === 'payment-success') {
+      const sessionId = urlObj.searchParams.get('session_id');
+      if (sessionId) {
+        console.log('💳 Processing payment success for session:', sessionId);
+        const { verifyAndActivateSession } = await import('./licensing/dodo');
+        const result = await verifyAndActivateSession(sessionId);
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('licensing:payment-success', { sessionId, ...result });
+        }
+      }
+    }
+
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
+    }
+  } catch (err) {
+    console.error('Failed to process deep link:', err);
+  }
+}
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  // Second Instance Behavior (Windows / Linux deep links)
+  app.on('second-instance', (_event: any, commandLine: string[]) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+
+    const deepLink = commandLine.find((arg: string) => arg.startsWith('fluxdm://'));
+    if (deepLink) {
+      handleDeepLink(deepLink);
+    }
+  });
+
+  // macOS Deep Link Handling
+  app.on('open-url', (event: any, url: string) => {
+    event.preventDefault();
+    if (mainWindow) {
+      handleDeepLink(url);
+    } else {
+      pendingDeepLinkUrl = url;
     }
   });
 
@@ -56,6 +103,17 @@ if (!gotTheLock) {
 
       createWindow();
       createTray();
+
+      if (pendingDeepLinkUrl) {
+        handleDeepLink(pendingDeepLinkUrl);
+        pendingDeepLinkUrl = null;
+      }
+
+      // Check initial launch args on Windows/Linux
+      const initialDeepLink = process.argv.find((arg: string) => arg.startsWith('fluxdm://'));
+      if (initialDeepLink) {
+        handleDeepLink(initialDeepLink);
+      }
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -25,6 +25,16 @@
             "timestamp": "Zeitstempel",
             "level": "Ebene",
             "message": "Nachricht"
+        },
+        "trends": {
+            "calculating": "Calculating...",
+            "default_vs_last": "0% vs last period",
+            "default_today": "0 today",
+            "processing": "Processing...",
+            "based_on_replies": "Based on replies"
+        },
+        "footer": {
+            "system_online": "System Online"
         }
     },
     "automations": {
@@ -138,13 +148,66 @@
             "step4": "4. Kommen Sie hierher zurück und versuchen Sie es erneut."
         },
         "error_browser": "Sie sind im Browser-Modus. Bitte öffnen Sie die FluxDM Desktop-App.",
-        "error_bridge": "Schwerwiegender Fehler: Desktop-Bridge defekt."
+        "error_bridge": "Schwerwiegender Fehler: Desktop-Bridge defekt.",
+        "developer_settings": {
+            "title": "Developer Settings & Custom API Key",
+            "subtitle": "Custom Meta App Config",
+            "description": "Use your own Meta App ID and Secret for full control. Leave blank to use default FluxDM keys.",
+            "app_id_label": "Meta App ID",
+            "app_id_placeholder": "Enter your App ID",
+            "app_secret_label": "Meta App Secret",
+            "app_secret_placeholder": "Enter your App Secret Key",
+            "graph_api_key_label": "Graph API Key",
+            "graph_api_key_placeholder": "Enter your Graph API Key",
+            "save_button": "Save API Keys",
+            "saving": "Saving...",
+            "saved_success": "Developer Settings Saved",
+            "save_error": "Failed to save settings",
+            "how_to_title": "How to get your own Keys",
+            "how_to_desc": "Watch this tutorial to learn how to create a Meta App and get your App ID & Secret.",
+            "watch_on_youtube": "Watch on YouTube ↗",
+            "meta_dev_link": "Go to Meta for Developers →"
+        },
+        "connected_accounts_title": "Connected Accounts",
+        "disconnect_confirm": "Are you sure you want to disconnect this account?",
+        "account_disconnected": "Account disconnected.",
+        "disconnect_failed": "Failed to disconnect: ",
+        "account_type_instagram": "Instagram",
+        "account_type_facebook": "Facebook Page"
     },
     "calendar": {
         "title": "Inhaltskalender",
         "subtitle": "Geplante Posts ansehen",
         "today": "Heute",
         "new_event": "Neues Ereignis",
-        "more_events": "+ {{count}} mehr"
+        "more_events": "+ {{count}} mehr",
+        "manage_content": "Manage Content",
+        "schedule_content": "Schedule Content",
+        "metrics": {
+            "accountibility": "Accountability Metrics",
+            "total_scheduled": "Total Scheduled",
+            "upcoming": "Upcoming",
+            "published": "Published",
+            "failed": "Failed"
+        },
+        "sidebar": {
+            "upcoming_queue": "Upcoming Queue",
+            "recent_automations": "Recent Automations",
+            "no_upcoming": "No content upcoming",
+            "select_date": "Select a date on the calendar to schedule.",
+            "no_automations": "No automations found. Create one in the Builder!"
+        },
+        "automation": {
+            "manage_title": "Manage Automation",
+            "name_label": "Automation Name",
+            "keyword_label": "Trigger Keyword",
+            "reply_label": "Reply Message",
+            "delete_button": "Delete",
+            "cancel_button": "Cancel",
+            "save_button": "Save Changes",
+            "saving_button": "Saving...",
+            "visual_warning": "This is a Visual Flow. Please use the Visual Builder for complex edits.",
+            "visual_warning_desc": "Only metadata (Name/Trigger) can be edited here."
+        }
     }
 }

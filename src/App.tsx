@@ -8,6 +8,8 @@ import Automations from './pages/Automations';
 import ConnectSocial from './pages/ConnectSocial';
 import Sidebar, { MobileMenuButton } from './components/Sidebar';
 import AppLayout from './components/layout/AppLayout';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
+import { DevicePairingModal } from './components/sync/DevicePairingModal';
 import { Toaster } from '@/components/ui/sonner';
 import Tour from './components/onboarding/Tour';
 import './App.css';
@@ -71,28 +73,50 @@ function App() {
     }
   };
 
+  const [mobilePairingOpen, setMobilePairingOpen] = useState(false);
+
   return (
-    <AppLayout
-      sidebar={
-        <Sidebar
-          currentPage={currentPage}
-          onNavigate={setCurrentPage}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-      }
-      mobileHeader={
-        <header className="lg:hidden h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 shadow-sm flex-none">
-          <MobileMenuButton onClick={() => setSidebarOpen(true)} />
-          <h1 className="text-lg font-semibold text-gray-800 dark:text-white">{getPageTitle()}</h1>
-          <div className="w-10" />
-        </header>
-      }
-    >
-      {renderPage()}
-      <Tour />
-      <Toaster />
-    </AppLayout>
+    <>
+      <AppLayout
+        sidebar={
+          <Sidebar
+            currentPage={currentPage}
+            onNavigate={setCurrentPage}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            onOpenPairing={() => setMobilePairingOpen(true)}
+          />
+        }
+        mobileHeader={
+          <header className="lg:hidden h-14 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 shadow-sm flex-none">
+            <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+            <h1 className="text-base font-semibold text-white">{getPageTitle()}</h1>
+            <button
+              onClick={() => setMobilePairingOpen(true)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-zinc-800 text-orange-400 font-medium"
+            >
+              Sync
+            </button>
+          </header>
+        }
+        bottomNav={
+          <MobileBottomNav
+            currentTab={currentPage}
+            onSelectTab={setCurrentPage}
+            onOpenPairing={() => setMobilePairingOpen(true)}
+          />
+        }
+      >
+        {renderPage()}
+        <Tour />
+        <Toaster />
+      </AppLayout>
+
+      <DevicePairingModal
+        isOpen={mobilePairingOpen}
+        onClose={() => setMobilePairingOpen(false)}
+      />
+    </>
   );
 }
 

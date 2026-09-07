@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FluxDM - Device Pairing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #09090b;
+      color: #fafafa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 24px;
+      padding: 2.5rem 2rem;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      color: white;
+      font-weight: 800;
+      font-size: 28px;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 10px 25px rgba(249, 115, 22, 0.35);
+    }
+    h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+    p.subtitle { color: #a1a1aa; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.75rem; }
+    .pin-box {
+      background: #27272a;
+      border: 2px dashed #f97316;
+      border-radius: 16px;
+      padding: 1.25rem 1rem;
+      margin-bottom: 1.75rem;
+    }
+    .pin-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa; margin-bottom: 0.25rem; }
+    .pin-value { font-family: monospace; font-size: 2.25rem; font-weight: 800; letter-spacing: 0.2em; color: #fb923c; }
+    .btn-primary {
+      display: block;
+      width: 100%;
+      background: #f97316;
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 1rem;
+      border-radius: 14px;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 20px rgba(249, 115, 22, 0.3);
+      margin-bottom: 0.75rem;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: #ea580c; transform: translateY(-1px); }
+    .btn-secondary {
+      display: block;
+      width: 100%;
+      background: transparent;
+      color: #d4d4d8;
+      border: 1px solid #3f3f46;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.85rem;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-secondary:hover { background: #27272a; color: white; }
+    .footer { margin-top: 2rem; font-size: 0.75rem; color: #71717a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">⚡</div>
+    <h1>FluxDM Device Pairing</h1>
+    <p class="subtitle">Link this mobile device to run 24/7 Instagram DM automations on your account.</p>
+
+    <div class="pin-box">
+      <div class="pin-label">Your Pairing PIN</div>
+      <div class="pin-value" id="pinDisplay">------</div>
+    </div>
+
+    <button id="openAppBtn" class="btn-primary" onclick="launchApp()">🚀 Open in FluxDM App</button>
+    <button id="copyPinBtn" class="btn-secondary" onclick="copyPin()">📋 Copy PIN to Clipboard</button>
+
+    <div class="footer">
+      Pairing codes expire in 10 minutes for your security.
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const pin = urlParams.get('pin') || '------';
+    document.getElementById('pinDisplay').textContent = pin;
+
+    function launchApp() {
+      if (pin && pin !== '------') {
+        window.location.href = 'fluxdm://pair?pin=' + encodeURIComponent(pin);
+      } else {
+        window.location.href = 'fluxdm://pair';
+      }
+    }
+
+    function copyPin() {
+      if (pin && pin !== '------') {
+        navigator.clipboard.writeText(pin).then(() => {
+          const btn = document.getElementById('copyPinBtn');
+          btn.textContent = '✅ Copied!';
+          setTimeout(() => { btn.textContent = '📋 Copy PIN to Clipboard'; }, 2000);
+        });
+      }
+    }
+
+    // Attempt auto-launch on mobile devices if PIN is present
+    if (pin && pin !== '------' && /android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      setTimeout(launchApp, 500);
+    }
+  </script>
+</body>
+</html>

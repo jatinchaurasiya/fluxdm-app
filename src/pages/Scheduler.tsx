@@ -137,9 +137,13 @@ export default function Scheduler() {
 
         setLoading(true);
         try {
-            // Extract paths
-            // @ts-ignore
-            const filePaths = files.map(f => f.path);
+            // Extract paths using Electron webUtils bridge
+            const filePaths = files.map((f: any) => {
+                if ((window as any).ipcRenderer?.getPathForFile) {
+                    return (window as any).ipcRenderer.getPathForFile(f) || f.path || f.name;
+                }
+                return f.path || f.name;
+            });
 
             // @ts-ignore
             if (window.ipcRenderer) {

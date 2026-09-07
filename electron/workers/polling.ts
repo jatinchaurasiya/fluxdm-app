@@ -9,245 +9,276 @@ const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
 let lastPolledTime = Math.floor(Date.now() / 1000);
 
+/**
+ * 🔑 Resolve the active Instagram Account (tokens, ids, username)
+ */
+function getActiveAccount(config: any) {
+  let account: any = null;
+  if (config.active_account_id) {
+    account = db.prepare('SELECT * FROM accounts WHERE id = ? AND is_active = 1').get(config.active_account_id);
+  }
+  if (!account) {
+    account = db.prepare('SELECT * FROM accounts WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
+  }
+  return account;
+}
+
 // ------------------------------------------------------------------
 // 🤖 JOB A: COMMENT MONITORING LOOP
 // ------------------------------------------------------------------
-async function runCommentLoop(config: any) {
-    const token = config.access_token || config.meta_access_token;
-    const pageId = config.page_id || config.instagram_business_id;
+async function runCommentLoop(config: any, account: any) {
+  const token = account?.access_token || config.access_token || config.meta_access_token;
+  const igBusinessId = account?.instagram_business_id || config.instagram_business_id;
+  const pageId = account?.page_id || config.page_id;
 
-    if (!token || !pageId) return;
+  if (!token || (!igBusinessId && !pageId)) return;
+  if (igBusinessId && typeof igBusinessId === 'string' && igBusinessId.startsWith('fallback_')) {
+    return;
+  }
 
+  const targetId = igBusinessId || pageId;
+
+  try {
+    // 1. Fetch Recent Media with Comments
+    const res = await axios.get(
+      `${BASE_URL}/${targetId}/media?fields=id,caption,comments.limit(15){id,text,timestamp,from{id,username},media{id}}&limit=10&access_token=${token}`
+    );
+
+    const mediaItems = res.data.data || [];
+    const flows = db.prepare('SELECT * FROM automation_flows WHERE is_active = 1').all() as any[];
+
+    // Parse safety settings
+    const settings = config.settings ? JSON.parse(config.settings) : {};
+    const blacklist = (settings.blacklist || '')
+      .split(',')
+      .map((s: string) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const replyDelaySec = parseInt(settings.replyDelay, 10) || 0;
+    const isSafeMode = Boolean(settings.safeMode);
+
+    for (const media of mediaItems) {
+      if (!media.comments || !media.comments.data) continue;
+
+      for (const comment of media.comments.data) {
+        const commentTime = new Date(comment.timestamp).getTime() / 1000;
+        if (commentTime <= lastPolledTime) continue;
+
+        const commenterUsername = comment.from?.username || '';
+        const commenterId = comment.from?.id || '';
+        const commentText = (comment.text || '').toLowerCase();
+
+        // Anti-ban Blacklist Filter
+        if (commenterUsername && blacklist.includes(commenterUsername.toLowerCase())) {
+          continue;
+        }
+        if (blacklist.some((blockedWord: string) => commentText.includes(blockedWord))) {
+          continue;
+        }
+
+        // 2. Flow Keyword Matching Logic
+        const matchedFlow = flows.find(flow => {
+          const isMediaMatch = !flow.attached_media_id || flow.attached_media_id === media.id;
+          const isKeywordMatch = flow.trigger_keyword && commentText.includes(flow.trigger_keyword.toLowerCase());
+          return isMediaMatch && isKeywordMatch;
+        });
+
+        if (matchedFlow) {
+          const flowConfig = JSON.parse(matchedFlow.nodes_json || '{}');
+
+          let replyMessage = '';
+          if (flowConfig.hook_text) {
+            const prompt = flowConfig.verification_keyword ? `\n\n(Reply "${flowConfig.verification_keyword}" when done!)` : '';
+            replyMessage = `${flowConfig.hook_text}${prompt}`;
+          } else if (flowConfig.message) {
+            replyMessage = flowConfig.message;
+          } else {
+            replyMessage = `Hey @${commenterUsername}! Here is the link you requested: ${flowConfig.link || 'https://fluxdm.app'}`;
+          }
+
+          // Anti-ban pacing jitter
+          let delay = replyDelaySec;
+          if (isSafeMode) {
+            // Add 3 to 9 seconds of randomized human jitter
+            delay += Math.floor(Math.random() * 7) + 3;
+          }
+
+          // Queue the Private DM Reply
+          db.prepare(`
+            INSERT INTO message_queue (
+              account_id, recipient_id, status, payload_json, message_type, comment_id, source, execute_at
+            ) VALUES (
+              ?, ?, 'PENDING', ?, 'PRIVATE_REPLY', ?, 'COMMENT', datetime('now', '+' || ? || ' seconds')
+            )
+          `).run(
+            account.id,
+            commenterId || comment.id,
+            JSON.stringify({ text: replyMessage, username: commenterUsername }),
+            comment.id,
+            delay
+          );
+
+          // Capture Lead
+          if (commenterUsername) {
+            db.prepare(`
+              INSERT INTO leads (account_id, username, source, created_at)
+              VALUES (?, ?, 'Instagram Comment', CURRENT_TIMESTAMP)
+            `).run(account.id, commenterUsername);
+          }
+
+          // Log event
+          db.prepare(`
+            INSERT INTO logs (account_id, level, message, created_at)
+            VALUES (?, 'INFO', ?, CURRENT_TIMESTAMP)
+          `).run(account.id, `Triggered automation "${matchedFlow.name}" for @${commenterUsername}`);
+        }
+      }
+    }
+  } catch (e: any) {
+    // Suppress polling noise, log critical failures
+    if (e.response?.status === 400 || e.response?.status === 401) {
+      console.warn('⚠️ Instagram Polling Auth Warning:', e.response?.data?.error?.message || e.message);
+    }
+  }
+}
+
+// ------------------------------------------------------------------
+// 📨 JOB B: INBOX MONITORING LOOP (Verification Keyword & Follow Gate)
+// ------------------------------------------------------------------
+async function runInboxLoop(config: any, account: any) {
+  const token = account?.access_token || config.access_token || config.meta_access_token;
+  const pageId = account?.page_id || config.page_id;
+
+  if (!token || !pageId) return;
+
+  try {
+    const res = await axios.get(
+      `${BASE_URL}/${pageId}/conversations?platform=instagram&fields=messages.limit(5){message,from,created_time}&limit=10&access_token=${token}`
+    );
+
+    const conversations = res.data.data || [];
+    const flows = db.prepare('SELECT * FROM automation_flows WHERE is_active = 1').all() as any[];
+
+    for (const conv of conversations) {
+      if (!conv.messages || !conv.messages.data) continue;
+
+      for (const msg of conv.messages.data) {
+        const msgTime = new Date(msg.created_time).getTime() / 1000;
+        if (msgTime <= lastPolledTime) continue;
+
+        const messageText = (msg.message || '').trim().toLowerCase();
+        if (!messageText) continue;
+
+        const matchedFlow = flows.find(flow => {
+          const cfg = JSON.parse(flow.nodes_json || '{}');
+          return cfg.verification_keyword && messageText === cfg.verification_keyword.toLowerCase();
+        });
+
+        if (matchedFlow) {
+          const userId = msg.from?.id;
+          if (!userId) continue;
+
+          const flowConfig = JSON.parse(matchedFlow.nodes_json || '{}');
+          let replyText = flowConfig.reward_text || 'Thank you for connecting!';
+          if (flowConfig.reward_link) {
+            replyText += `\n\n${flowConfig.reward_link}`;
+          }
+
+          db.prepare(`
+            INSERT INTO message_queue (account_id, recipient_id, status, payload_json, message_type, source, execute_at)
+            VALUES (?, ?, 'PENDING', ?, 'TEXT', 'INBOX_REPLY', CURRENT_TIMESTAMP)
+          `).run(
+            account.id,
+            userId,
+            JSON.stringify({ text: replyText })
+          );
+        }
+      }
+    }
+  } catch (e: any) {
+    // Ignore routine conversation poll errors
+  }
+}
+
+// ------------------------------------------------------------------
+// 🚀 JOB C: MESSAGE PROCESSOR & ANTI-BAN DISPATCHER
+// ------------------------------------------------------------------
+async function runMessageProcessor(config: any, account: any) {
+  const token = account?.access_token || config.access_token || config.meta_access_token;
+  const igBusinessId = account?.instagram_business_id || config.instagram_business_id;
+
+  if (!token) return;
+
+  // Fetch pending messages ready for execution
+  const pendingTasks = db.prepare(`
+    SELECT * FROM message_queue 
+    WHERE status = 'PENDING' AND execute_at <= datetime('now')
+    ORDER BY id ASC LIMIT 5
+  `).all() as any[];
+
+  for (const task of pendingTasks) {
     try {
-        // 1. Fetch Comments
-        const res = await axios.get(
-            `${BASE_URL}/${pageId}/media?fields=id,comments.limit(5){id,text,timestamp,media{id}}&limit=10&access_token=${token}`
-        );
+      const payload = JSON.parse(task.payload_json || '{}');
+      let url = '';
+      let body: any = {};
 
-        const mediaItems = res.data.data || [];
-        const flows = db.prepare('SELECT * FROM automation_flows WHERE is_active = 1').all() as any[];
+      if (task.message_type === 'PRIVATE_REPLY' && task.comment_id) {
+        // Meta Graph API Private Reply to Comment
+        url = `${BASE_URL}/${task.comment_id}/private_replies`;
+        body = { message: payload.text, access_token: token };
+      } else {
+        // Instagram Direct Message
+        const senderTarget = igBusinessId || 'me';
+        url = `${BASE_URL}/${senderTarget}/messages`;
+        body = {
+          recipient: { id: task.recipient_id },
+          message: { text: payload.text },
+          access_token: token
+        };
+      }
 
-        for (const media of mediaItems) {
-            if (!media.comments) continue;
+      await axios.post(url, body);
 
-            for (const comment of media.comments.data) {
-                const commentTime = new Date(comment.timestamp).getTime() / 1000;
-                if (commentTime <= lastPolledTime) continue;
+      db.prepare("UPDATE message_queue SET status = 'SENT', execute_at = CURRENT_TIMESTAMP WHERE id = ?").run(task.id);
 
-                // 2. Matching Logic
-                const matchedFlow = flows.find(flow => {
-                    const isMediaMatch = flow.attached_media_id === media.id;
-                    const isKeywordMatch = flow.trigger_keyword && comment.text.toLowerCase().includes(flow.trigger_keyword.toLowerCase());
+      // Humanized anti-ban pause between successive DMs (1.5 seconds)
+      await new Promise(r => setTimeout(r, 1500));
+    } catch (error: any) {
+      console.error(`❌ Message Queue #${task.id} Failed:`, error.response?.data?.error?.message || error.message);
+      const newTryCount = (task.try_count || 0) + 1;
+      const newStatus = newTryCount >= 3 ? 'FAILED' : 'PENDING';
+      const retryDelay = newTryCount * 60; // Exponential retry delay (60s, 120s)
 
-                    if (flow.attached_media_id) {
-                        return isMediaMatch && isKeywordMatch;
-                    }
-                    return isKeywordMatch;
-                });
-
-                if (matchedFlow) {
-                    // 3. Queue Action
-                    const flowConfig = JSON.parse(matchedFlow.nodes_json || '{}');
-
-                    // Determine Payload based on Flow Type
-                    let messagePayload = {};
-
-                    if (flowConfig.hook_text) {
-                        // SMART FOLLOW FLOW - Hook Message
-                        // Inform user to reply with keyword
-                        const replyPrompt = flowConfig.verification_keyword
-                            ? `\n\n(Reply "${flowConfig.verification_keyword}" when done!)`
-                            : "";
-
-                        messagePayload = {
-                            text: flowConfig.hook_text + replyPrompt
-                        };
-                    } else {
-                        // LEGACY / SIMPLE FLOW
-                        messagePayload = {
-                            text: flowConfig.dm_text || "Thanks for commenting!"
-                        };
-                    }
-
-                    // Insert into Message Queue
-                    db.prepare(`
-                        INSERT INTO message_queue (recipient_id, status, payload_json, message_type, comment_id, source)
-                        VALUES (?, 'PENDING', ?, 'TEXT', ?, 'COMMENT')
-                    `).run(
-                        comment.id, // Recipient ID (Comment ID for private_replies)
-                        JSON.stringify(messagePayload),
-                        comment.id
-                    );
-                }
-            }
-        }
-    } catch (e: any) {
-        // console.error('Comment Polling Error:', e.message);
+      db.prepare(`
+        UPDATE message_queue 
+        SET status = ?, try_count = ?, execute_at = datetime('now', '+' || ? || ' seconds')
+        WHERE id = ?
+      `).run(newStatus, newTryCount, retryDelay, task.id);
     }
+  }
 }
 
 // ------------------------------------------------------------------
-// 📨 JOB B: INBOX MONITORING LOOP (Verification Keyword)
-// ------------------------------------------------------------------
-async function runInboxLoop(config: any) {
-    const token = config.access_token || config.meta_access_token;
-    const pageId = config.page_id || config.instagram_business_id;
-
-    if (!token || !pageId) return;
-
-    try {
-        // Fetch conversations to get messages
-        // We need to find recent messages from users
-        const res = await axios.get(
-            `${BASE_URL}/${pageId}/conversations?platform=instagram&fields=messages.limit(5){message,from,created_time}&limit=10&access_token=${token}`
-        );
-
-        const conversations = res.data.data || [];
-        const flows = db.prepare('SELECT * FROM automation_flows WHERE is_active = 1').all() as any[];
-
-        for (const conv of conversations) {
-            if (!conv.messages) continue;
-
-            for (const msg of conv.messages.data) {
-                const msgTime = new Date(msg.created_time).getTime() / 1000;
-                // Only process new messages
-                if (msgTime <= lastPolledTime) continue;
-
-                // Check if message is from user (not page)
-                // 'from' field usually contains id, name, email. 
-                // We should strictly filter out our own messages if possible, but incoming usually implies from user in 'conversations' endpoint? 
-                // Actually conversations includes both sent and received. 
-                // We need to check if sender ID != pageId. (Actually pageId might be different from IG user ID).
-                // Let's assume for now we perform the check.
-
-                const messageText = msg.message;
-                if (!messageText) continue;
-
-                // Match verification keyword
-                const matchedFlow = flows.find(flow => {
-                    const cfg = JSON.parse(flow.nodes_json || '{}');
-                    return cfg.verification_keyword && messageText.trim().toLowerCase() === cfg.verification_keyword.toLowerCase();
-                });
-
-                if (matchedFlow) {
-                    const userId = msg.from.id; // User PSID/IGSID
-
-                    // CHECK FOLLOW STATUS
-                    try {
-                        const followCheckRes = await axios.get(
-                            `${BASE_URL}/${userId}?fields=follows_count,is_user_follow_business&access_token=${token}`
-                        );
-
-                        const isFollowing = followCheckRes.data.is_user_follow_business;
-                        const flowConfig = JSON.parse(matchedFlow.nodes_json || '{}');
-                        let replyText = "";
-
-                        if (isFollowing) {
-                            // SUCCESS: Send Reward
-
-                            replyText = flowConfig.reward_text;
-                            if (flowConfig.reward_link) {
-                                replyText += `\n\n${flowConfig.reward_link}`;
-                            }
-
-                            // Log Success (Optional: Add to leads table or similar if exists)
-                            // db.prepare("INSERT INTO leads ...").run(...) 
-                        } else {
-                            // FAIL: Send Gate Text
-
-                            replyText = flowConfig.gate_text || "Please follow us first!";
-                        }
-
-                        // Queue Reply
-                        db.prepare(`
-                            INSERT INTO message_queue (recipient_id, status, payload_json, message_type, comment_id, source)
-                            VALUES (?, 'PENDING', ?, 'TEXT', NULL, 'DM')
-                        `).run(
-                            userId,
-                            JSON.stringify({ text: replyText })
-                        );
-
-                    } catch (err: any) {
-                        console.error("Follow Check Error:", err.response?.data || err.message);
-                    }
-                }
-            }
-        }
-
-    } catch (e: any) {
-        // console.error('Inbox Polling Error:', e.message);
-    }
-}
-
-// ------------------------------------------------------------------
-// 🚀 JOB C: MESSAGE PROCESSOR (SEND DMS)
-// ------------------------------------------------------------------
-async function runMessageProcessor(config: any) {
-    const queue = db.prepare(`SELECT * FROM message_queue WHERE status = 'PENDING' LIMIT 5`).all() as any[];
-    if (queue.length === 0) return;
-
-    const token = config.access_token || config.meta_access_token;
-
-    for (const task of queue) {
-        try {
-
-            const payload = JSON.parse(task.payload_json);
-
-            let url = '';
-            let body = {};
-
-            if (task.source === 'COMMENT') {
-                // Private Reply to Comment
-                url = `${BASE_URL}/${task.recipient_id}/private_replies`;
-                body = { message: payload.text, access_token: token };
-            } else {
-                // Direct Message
-                url = `${BASE_URL}/me/messages`;
-                body = {
-                    recipient: { id: task.recipient_id },
-                    message: { text: payload.text },
-                    access_token: token
-                };
-            }
-
-            // Real API Call
-            await axios.post(url, body);
-
-            // Update Status
-            db.prepare("UPDATE message_queue SET status = 'SENT', execute_at = CURRENT_TIMESTAMP WHERE id = ?").run(task.id);
-
-        } catch (error: any) {
-            console.error(`❌ Message #${task.id} Failed:`, error.message);
-            db.prepare("UPDATE message_queue SET status = 'FAILED', payload_json = ? WHERE id = ?")
-                .run(JSON.stringify({ error: error.message }), task.id);
-        }
-    }
-}
-
-
-// ------------------------------------------------------------------
-//  MAIN EXPORT
+// 🏁 MAIN ENGINE EXPORT
 // ------------------------------------------------------------------
 export function startPollingEngine() {
+  console.log('⚡ FluxDM Polling Engine Initialized (10s intervals)');
 
+  cron.schedule('*/10 * * * * *', async () => {
+    const cycleStart = Math.floor(Date.now() / 1000);
 
-    // Job A & B: Automation loops (10s)
-    cron.schedule('*/10 * * * * *', async () => {
-        const cycleStart = Math.floor(Date.now() / 1000);
+    const config = db.prepare('SELECT * FROM user_config LIMIT 1').get() as any;
+    if (config) {
+      // Update local heartbeat
+      db.prepare(`UPDATE user_config SET last_heartbeat = CURRENT_TIMESTAMP WHERE id = ?`).run(config.id);
 
-        // Get Config
-        const config = db.prepare('SELECT * FROM user_config LIMIT 1').get() as any;
-        if (config) {
-            await runCommentLoop(config);
-            await runInboxLoop(config);
-            await runMessageProcessor(config);
-        }
+      const account = getActiveAccount(config);
+      if (account && account.access_token) {
+        await runCommentLoop(config, account);
+        await runInboxLoop(config, account);
+        await runMessageProcessor(config, account);
+      }
+    }
 
-        lastPolledTime = cycleStart;
-    });
-
-    // Scheduler is now handled by @/workers/scheduler.ts
-    // cron.schedule('* * * * *', async () => {
-    //    await runSchedulerLoop();
-    // });
+    lastPolledTime = cycleStart;
+  });
 }

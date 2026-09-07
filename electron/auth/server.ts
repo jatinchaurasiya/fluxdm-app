@@ -9,25 +9,26 @@ import { Server } from 'http';
 
 let server: Server | null = null;
 
+export interface OAuthOptions {
+    customAppId?: string;
+    customAppSecret?: string;
+    mode?: 'instagram' | 'facebook';
+}
+
 /**
  * 🔐 OAuth Loopback Server
  * 
- * This server handles the OAuth callback from Meta/Facebook.
- * It runs locally on port 3000 and catches the authorization code,
- * then exchanges it for a long-lived access token.
- * 
- * Flow:
- * 1. User clicks "Log in with Facebook" button
- * 2. This function starts an Express server on localhost:3000
- * 3. Opens browser to Meta's OAuth dialog
- * 4. User approves the app
- * 5. Meta redirects to http://localhost:3000/callback?code=XYZ
- * 6. Server catches the code and exchanges it for tokens
- * 7. Saves token + account details to database
- * 8. Shows success page to user
- * 9. Resolves promise so the desktop app can update UI
+ * Supports:
+ * 1. Direct Instagram Login for Business (No Facebook Page Required!)
+ *    Uses https://www.instagram.com/oauth/authorize & https://api.instagram.com/oauth/access_token
+ * 2. Legacy Facebook Pages Login (for users with linked Facebook Pages)
+ *    Uses https://www.facebook.com/v18.0/dialog/oauth
  */
-export function startOAuthServer(customAppId?: string, customAppSecret?: string): Promise<string> {
+export function startOAuthServer(
+    customAppIdOrOptions?: string | OAuthOptions, 
+    customAppSecret?: string,
+    explicitMode?: 'instagram' | 'facebook'
+): Promise<string> {
     return new Promise((resolve, reject) => {
         // Close any existing server instance
         if (server) {
@@ -35,12 +36,35 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
             server = null;
         }
 
+        let customAppId: string | undefined;
+        let secretToUse: string | undefined = customAppSecret;
+        let mode: 'instagram' | 'facebook' = explicitMode || 'instagram';
+
+        if (typeof customAppIdOrOptions === 'object' && customAppIdOrOptions !== null) {
+            customAppId = customAppIdOrOptions.customAppId;
+            secretToUse = customAppIdOrOptions.customAppSecret || customAppSecret;
+            mode = customAppIdOrOptions.mode || 'instagram';
+        } else if (typeof customAppIdOrOptions === 'string') {
+            customAppId = customAppIdOrOptions;
+        }
+
         const app = express();
         const PORT = 3000;
         const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 
-        // Define the OAuth scopes we need
-        const SCOPES = [
+        const appIdToUse = customAppId || META_CONFIG.appId;
+        const appSecretToUse = secretToUse || APP_SECRET;
+
+        // Scopes for Instagram Login for Business
+        const IG_SCOPES = [
+            'instagram_business_basic',
+            'instagram_business_manage_messages',
+            'instagram_business_manage_comments',
+            'instagram_business_content_publish'
+        ].join(',');
+
+        // Scopes for Facebook Pages Login
+        const FB_SCOPES = [
             'instagram_basic',
             'instagram_manage_comments',
             'instagram_manage_messages',
@@ -48,9 +72,7 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
             'instagram_content_publish'
         ].join(',');
 
-
         // 📍 Route: GET /callback
-        // This is where Meta redirects after user authorization
         app.get('/callback', async (req, res) => {
             const code = req.query.code as string;
 
@@ -58,9 +80,9 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
                 console.error('❌ No authorization code received');
                 res.status(400).send(`
                     <html>
-                        <body style="background: #fee; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column;">
-                            <h1 style="color: #c00;">❌ Authorization Failed</h1>
-                            <p>No code received from Meta. Please try again.</p>
+                        <body style="background: #09090b; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column;">
+                            <h1 style="color: #ef4444;">❌ Authorization Failed</h1>
+                            <p>No code received from Instagram/Meta. Please try again.</p>
                         </body>
                     </html>
                 `);
@@ -69,80 +91,138 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
             }
 
             try {
-                console.log('📥 Received authorization code, exchanging for token...');
+                console.log(`📥 Received authorization code for mode: ${mode}. Exchanging for tokens...`);
 
-                // STEP 1: Exchange authorization code for short-lived token
-                const appIdToUse = customAppId || META_CONFIG.appId;
-                const appSecretToUse = customAppSecret || APP_SECRET;
+                let finalToken = '';
+                let igBusinessId = '';
+                let pageId = '';
+                let userName = 'Instagram Creator';
+                let profilePicture = '';
 
-                console.log(`🔑 Using App ID: ${appIdToUse} (Custom: ${!!customAppId})`);
+                // Try Direct Instagram OAuth Token Exchange first (if mode is instagram or auto)
+                let igSuccess = false;
+                if (mode === 'instagram') {
+                    try {
+                        console.log('🔄 Exchanging code with api.instagram.com/oauth/access_token...');
+                        const params = new URLSearchParams();
+                        params.append('client_id', appIdToUse);
+                        params.append('client_secret', appSecretToUse);
+                        params.append('grant_type', 'authorization_code');
+                        params.append('redirect_uri', REDIRECT_URI);
+                        params.append('code', code);
 
-                const shortTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
-                    params: {
-                        client_id: appIdToUse,
-                        client_secret: appSecretToUse,
-                        redirect_uri: REDIRECT_URI,
-                        code: code
+                        const igTokenRes = await axios.post('https://api.instagram.com/oauth/access_token', params.toString(), {
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            timeout: 10000
+                        });
+
+                        const shortLivedToken = igTokenRes.data.access_token;
+                        const igUserId = igTokenRes.data.user_id;
+
+                        if (shortLivedToken && igUserId) {
+                            console.log(`✅ Direct Instagram short token obtained for user: ${igUserId}. Exchanging for 60-day token...`);
+                            
+                            // Exchange for 60-day long-lived token
+                            const longTokenRes = await axios.get('https://graph.instagram.com/access_token', {
+                                params: {
+                                    grant_type: 'ig_exchange_token',
+                                    client_secret: appSecretToUse,
+                                    access_token: shortLivedToken
+                                },
+                                timeout: 10000
+                            });
+
+                            finalToken = longTokenRes.data.access_token || shortLivedToken;
+                            igBusinessId = String(igUserId);
+                            pageId = String(igUserId);
+
+                            // Fetch Instagram profile info
+                            try {
+                                const profileRes = await axios.get('https://graph.instagram.com/v22.0/me', {
+                                    params: {
+                                        fields: 'id,username,name,account_type,profile_picture_url',
+                                        access_token: finalToken
+                                    },
+                                    timeout: 8000
+                                });
+                                userName = profileRes.data.username || profileRes.data.name || `ig_${igUserId}`;
+                                profilePicture = profileRes.data.profile_picture_url || '';
+                            } catch (e: any) {
+                                console.warn('Could not fetch Instagram profile picture/name, using defaults:', e.message);
+                                userName = `ig_${igUserId}`;
+                            }
+
+                            igSuccess = true;
+                        }
+                    } catch (igErr: any) {
+                        console.warn('Direct Instagram token exchange did not succeed:', igErr.response?.data || igErr.message);
+                        if (mode === 'instagram') {
+                            throw new Error(igErr.response?.data?.error_message || igErr.response?.data?.error?.message || igErr.message);
+                        }
                     }
-                });
-
-                const shortLivedToken = shortTokenResponse.data.access_token;
-
-                if (!shortLivedToken) {
-                    throw new Error('Failed to retrieve short-lived token');
                 }
 
-                console.log('✅ Short-lived token obtained, exchanging for long-lived token...');
+                // Fallback to Facebook Graph API OAuth flow if not resolved via Direct Instagram
+                if (!igSuccess) {
+                    console.log('🔄 Running Facebook Graph API OAuth exchange...');
+                    const shortTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
+                        params: {
+                            client_id: appIdToUse,
+                            client_secret: appSecretToUse,
+                            redirect_uri: REDIRECT_URI,
+                            code: code
+                        },
+                        timeout: 10000
+                    });
 
-                // STEP 2: Exchange short-lived token for long-lived token (60 days)
-                const longTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
-                    params: {
-                        grant_type: 'fb_exchange_token',
-                        client_id: appIdToUse,
-                        client_secret: appSecretToUse,
-                        fb_exchange_token: shortLivedToken
-                    }
-                });
+                    const shortLivedToken = shortTokenResponse.data.access_token;
+                    if (!shortLivedToken) throw new Error('Failed to retrieve short-lived token from Facebook');
 
-                const longLivedToken = longTokenResponse.data.access_token;
+                    const longTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
+                        params: {
+                            grant_type: 'fb_exchange_token',
+                            client_id: appIdToUse,
+                            client_secret: appSecretToUse,
+                            fb_exchange_token: shortLivedToken
+                        },
+                        timeout: 10000
+                    });
 
-                if (!longLivedToken) {
-                    throw new Error('Failed to retrieve long-lived token');
-                }
+                    finalToken = longTokenResponse.data.access_token;
+                    if (!finalToken) throw new Error('Failed to retrieve long-lived token from Facebook');
 
-                console.log('✅ Long-lived token obtained! Fetching account details...');
+                    // Fetch Facebook Pages & Linked Instagram Account
+                    const accountResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
+                        params: {
+                            fields: 'id,name,picture,instagram_business_account',
+                            access_token: finalToken
+                        },
+                        timeout: 10000
+                    });
 
-                // STEP 3: Fetch account details (Page ID, IG Business Account ID, etc.)
-                const accountResponse = await axios.get('https://graph.facebook.com/v18.0/me/accounts', {
-                    params: {
-                        fields: 'id,name,picture,instagram_business_account',
-                        access_token: longLivedToken
-                    }
-                });
+                    const pages = accountResponse.data.data || [];
+                    const connectedPage = pages.find((p: any) => p.instagram_business_account);
 
-                const pages = accountResponse.data.data;
-                let connectedPage = pages.find((p: any) => p.instagram_business_account);
-                let usingFallback = false;
-
-                if (!connectedPage) {
-                    console.warn("⚠️ No fully connected IG Business Account found. Falling back to first available Page.");
-                    if (pages && pages.length > 0) {
-                        connectedPage = pages[0];
-                        usingFallback = true;
+                    if (connectedPage) {
+                        pageId = connectedPage.id;
+                        igBusinessId = connectedPage.instagram_business_account.id;
+                        userName = connectedPage.name;
+                        profilePicture = connectedPage.picture?.data?.url || '';
+                    } else if (pages.length > 0) {
+                        // Page without linked IG
+                        pageId = pages[0].id;
+                        igBusinessId = pages[0].id;
+                        userName = pages[0].name;
+                        profilePicture = pages[0].picture?.data?.url || '';
                     } else {
-                        throw new Error('No Instagram Business Account linked to your Facebook Pages, and no Pages found to fallback to.');
+                        throw new Error('No Facebook Page or Instagram Business Account found.');
                     }
                 }
 
-                const pageId = connectedPage.id;
-                // If fallback, use Page ID as fake IG ID or the real one if available
-                const igBusinessId = connectedPage.instagram_business_account?.id || `fallback_${pageId}`;
-                const userName = connectedPage.name;
-                const profilePicture = connectedPage.picture?.data?.url || '';
+                // Clean up any old invalid fallback accounts
+                db.prepare("DELETE FROM accounts WHERE instagram_business_id LIKE 'fallback_%'").run();
 
-                console.log(`✅ Connected to: ${userName} (Page ID: ${pageId}, IG ID: ${igBusinessId}) ${usingFallback ? '[FALLBACK MODE]' : ''}`);
-
-                // STEP 4: Save everything to database (Accounts Table)
+                // Save to database
                 db.prepare(`
                     INSERT INTO accounts (meta_user_id, instagram_business_id, page_id, access_token, username, profile_picture_url, is_active)
                     VALUES (NULL, @instagram_business_id, @page_id, @access_token, @username, @profile_picture_url, 1)
@@ -155,33 +235,34 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
                 `).run({
                     instagram_business_id: igBusinessId,
                     page_id: pageId,
-                    access_token: longLivedToken,
+                    access_token: finalToken,
                     username: userName,
                     profile_picture_url: profilePicture
                 });
 
-                // Get Account ID
+                // Set as Active Account
                 const account = db.prepare('SELECT id FROM accounts WHERE instagram_business_id = ?').get(igBusinessId) as any;
-
-                // Set Active Account
-                const existingConfig = db.prepare('SELECT id FROM user_config LIMIT 1').get() as any;
-
-                if (existingConfig) {
-                    db.prepare('UPDATE user_config SET active_account_id = ? WHERE id = ?').run(account.id, existingConfig.id);
-                } else {
-                    db.prepare('INSERT INTO user_config (active_account_id) VALUES (?)').run(account.id);
+                if (account) {
+                    const existingConfig = db.prepare('SELECT id FROM user_config LIMIT 1').get() as any;
+                    if (existingConfig) {
+                        db.prepare('UPDATE user_config SET active_account_id = ? WHERE id = ?').run(account.id, existingConfig.id);
+                    } else {
+                        db.prepare('INSERT INTO user_config (active_account_id) VALUES (?)').run(account.id);
+                    }
                 }
 
-                console.log('✅ Token and account details saved to database!');
+                console.log(`✅ Instagram Account successfully connected: @${userName} (ID: ${igBusinessId})`);
 
-                // STEP 5: Show success page to user
+                // Send success response page
                 res.send(`
+                    <!DOCTYPE html>
                     <html>
                         <head>
                             <title>FluxDM - Connected!</title>
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
                             <style>
                                 body {
-                                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                    background: #09090b;
                                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                                     display: flex;
                                     align-items: center;
@@ -190,109 +271,146 @@ export function startOAuthServer(customAppId?: string, customAppSecret?: string)
                                     margin: 0;
                                     color: white;
                                 }
-                                .container {
+                                .card {
                                     text-align: center;
-                                    background: rgba(255, 255, 255, 0.1);
-                                    backdrop-filter: blur(10px);
-                                    padding: 3rem;
-                                    border-radius: 20px;
-                                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                                    background: rgba(24, 24, 27, 0.9);
+                                    border: 1px solid rgba(255, 255, 255, 0.1);
+                                    padding: 3rem 2.5rem;
+                                    border-radius: 24px;
+                                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+                                    max-width: 440px;
+                                    width: 90%;
+                                }
+                                .badge {
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    width: 72px;
+                                    height: 72px;
+                                    border-radius: 50%;
+                                    background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+                                    margin-bottom: 1.5rem;
+                                    box-shadow: 0 10px 25px rgba(225, 48, 108, 0.4);
+                                    font-size: 2rem;
                                 }
                                 h1 {
-                                    font-size: 2.5rem;
-                                    margin: 0 0 1rem 0;
+                                    font-size: 1.75rem;
+                                    font-weight: 700;
+                                    margin: 0 0 0.5rem 0;
                                 }
                                 p {
-                                    font-size: 1.2rem;
-                                    opacity: 0.9;
+                                    color: #a1a1aa;
+                                    font-size: 0.95rem;
+                                    margin: 0.25rem 0;
                                 }
-                                .checkmark {
-                                    font-size: 4rem;
-                                    animation: bounce 0.6s ease;
+                                .username {
+                                    color: #f43f5e;
+                                    font-weight: 600;
                                 }
-                                @keyframes bounce {
-                                    0%, 100% { transform: scale(1); }
-                                    50% { transform: scale(1.2); }
+                                .auto-close {
+                                    font-size: 0.8rem;
+                                    color: #71717a;
+                                    margin-top: 1.5rem;
                                 }
                             </style>
                         </head>
                         <body>
-                            <div class="container">
-                                <div class="checkmark">✅</div>
+                            <div class="card">
+                                <div class="badge">📸</div>
                                 <h1>Connected Successfully!</h1>
-                                <p>FluxDM has been authorized as <strong>${userName}</strong></p>
-                                <p style="font-size: 1rem; margin-top: 2rem;">Redirecting you back to the app...</p>
-                                <p style="font-size: 0.8rem; color: #eee; margin-top: 0.5rem;">If nothing happens, you can close this tab.</p>
+                                <p>Authorized as <span class="username">@${userName}</span></p>
+                                <p>You can now return to FluxDM.</p>
+                                <p class="auto-close">This window will close automatically...</p>
                             </div>
                             <script>
-                                // Try to redirect to app protocol
-                                setTimeout(() => {
-                                    window.location.href = 'fluxdm://auth/callback';
-                                }, 1000);
-
-                                // Auto-close after 5 seconds
-                                setTimeout(() => {
-                                    window.close();
-                                }, 5000);
+                                setTimeout(() => { window.location.href = 'fluxdm://auth/callback'; }, 800);
+                                setTimeout(() => { window.close(); }, 3500);
                             </script>
                         </body>
                     </html>
                 `);
 
-                // STEP 6: Resolve the promise with the token
-                // This allows the IPC handler to know the auth succeeded
-                resolve(longLivedToken);
-
+                resolve(finalToken);
             } catch (error: any) {
                 console.error('❌ OAuth Error:', error?.response?.data || error.message);
 
                 res.status(500).send(`
+                    <!DOCTYPE html>
                     <html>
-                        <body style="background: #fee; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column;">
-                            <h1 style="color: #c00;">❌ Authentication Failed</h1>
-                            <p>Error: ${error?.response?.data?.error?.message || error.message}</p>
-                            <p style="font-size: 0.9rem; color: #666;">Check the app console for more details.</p>
+                        <head>
+                            <title>FluxDM - Connection Failed</title>
+                            <style>
+                                body {
+                                    background: #09090b;
+                                    color: white;
+                                    font-family: sans-serif;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    height: 100vh;
+                                    margin: 0;
+                                }
+                                .box {
+                                    background: #18181b;
+                                    border: 1px solid #ef4444;
+                                    padding: 2.5rem;
+                                    border-radius: 16px;
+                                    text-align: center;
+                                    max-width: 460px;
+                                }
+                                h1 { color: #ef4444; margin-top: 0; }
+                                p { color: #a1a1aa; font-size: 0.9rem; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="box">
+                                <h1>Connection Failed</h1>
+                                <p>${error?.response?.data?.error?.message || error.message}</p>
+                                <p style="margin-top: 1.5rem; font-size: 0.8rem; color: #71717a;">You can close this tab and try again in the app.</p>
+                            </div>
                         </body>
                     </html>
                 `);
 
                 reject(error);
             } finally {
-                // Close the server after handling the callback
                 if (server) {
                     setTimeout(() => {
                         server?.close();
                         server = null;
                         console.log('🔒 Auth server closed');
-                    }, 1000); // Small delay to ensure response is sent
+                    }, 1000);
                 }
             }
         });
 
-        // Start the server
+        // Start local listener
         server = app.listen(PORT, async () => {
-            console.log(`🔐 OAuth server started on http://localhost:${PORT}`);
+            console.log(`🔐 OAuth loopback server active on http://localhost:${PORT}`);
 
-            // Build the OAuth URL
-            const appIdToUse = customAppId || META_CONFIG.appId;
-            const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appIdToUse}&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}`;
+            let authUrl = '';
+            if (mode === 'instagram') {
+                // Direct Instagram Login for Business - Zero Facebook Page requirement
+                authUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${appIdToUse}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${IG_SCOPES}`;
+            } else {
+                // Facebook Graph OAuth
+                authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appIdToUse}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${FB_SCOPES}`;
+            }
 
-            console.log(`🌐 Opening browser for OAuth: ${authUrl}`);
+            console.log(`🌐 Initiating ${mode.toUpperCase()} OAuth in browser: ${authUrl}`);
 
-            // Open the browser to the OAuth dialog
             try {
                 await shell.openExternal(authUrl);
             } catch (err) {
-                console.error('❌ Failed to open browser:', err);
+                console.error('❌ Failed to launch browser for OAuth:', err);
                 reject(err);
             }
         });
 
-        // Handle server errors
         server.on('error', (err: any) => {
             if (err.code === 'EADDRINUSE') {
-                console.error('❌ Port 3000 is already in use. Please close other instances.');
-                reject(new Error('Port 3000 is already in use'));
+                console.error('❌ Port 3000 is occupied. Please close competing instances.');
+                reject(new Error('Port 3000 is occupied. Please try again.'));
             } else {
                 console.error('❌ Server error:', err);
                 reject(err);

@@ -172,9 +172,11 @@ export default function Automations({ onNavigate }: AutomationsProps) {
                                         variant="ghost"
                                         size="icon"
                                         className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                        // TODO: Pass ID to wizard for editing
-                                        onClick={() => onNavigate(`automation-wizard`)}
-                                        title="Edit (Coming Soon)"
+                                        onClick={() => {
+                                            sessionStorage.setItem('edit_automation_flow', JSON.stringify(automation));
+                                            onNavigate('automation-wizard');
+                                        }}
+                                        title="Edit Automation"
                                     >
                                         <Edit className="w-4 h-4" />
                                     </Button>
