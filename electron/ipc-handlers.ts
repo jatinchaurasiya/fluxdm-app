@@ -52,10 +52,14 @@ export function registerIpcHandlers() {
 
             const customAppId = explicitAppId || metaConfig.appId;
             const customAppSecret = metaConfig.appSecret;
+            const customInstagramAppId = metaConfig.instagramAppId;
+            const customInstagramAppSecret = metaConfig.instagramAppSecret;
 
             const token = await startOAuthServer({
                 customAppId,
                 customAppSecret,
+                customInstagramAppId,
+                customInstagramAppSecret,
                 mode
             });
 

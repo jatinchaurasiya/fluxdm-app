@@ -12,6 +12,8 @@ let server: Server | null = null;
 export interface OAuthOptions {
     customAppId?: string;
     customAppSecret?: string;
+    customInstagramAppId?: string;
+    customInstagramAppSecret?: string;
     mode?: 'instagram' | 'facebook';
 }
 
@@ -20,9 +22,9 @@ export interface OAuthOptions {
  * 
  * Supports:
  * 1. Direct Instagram Login for Business (No Facebook Page Required!)
- *    Uses https://www.instagram.com/oauth/authorize & https://api.instagram.com/oauth/access_token
- * 2. Legacy Facebook Pages Login (for users with linked Facebook Pages)
- *    Uses https://www.facebook.com/v18.0/dialog/oauth
+ *    Requires Instagram App ID from Meta Dashboard > Instagram > API setup
+ * 2. Facebook Pages Login (for users with linked Facebook Pages)
+ *    Uses Meta (Facebook) App ID
  */
 export function startOAuthServer(
     customAppIdOrOptions?: string | OAuthOptions, 
@@ -38,11 +40,15 @@ export function startOAuthServer(
 
         let customAppId: string | undefined;
         let secretToUse: string | undefined = customAppSecret;
+        let customInstagramAppId: string | undefined;
+        let customInstagramAppSecret: string | undefined;
         let mode: 'instagram' | 'facebook' = explicitMode || 'instagram';
 
         if (typeof customAppIdOrOptions === 'object' && customAppIdOrOptions !== null) {
             customAppId = customAppIdOrOptions.customAppId;
             secretToUse = customAppIdOrOptions.customAppSecret || customAppSecret;
+            customInstagramAppId = customAppIdOrOptions.customInstagramAppId;
+            customInstagramAppSecret = customAppIdOrOptions.customInstagramAppSecret;
             mode = customAppIdOrOptions.mode || 'instagram';
         } else if (typeof customAppIdOrOptions === 'string') {
             customAppId = customAppIdOrOptions;
@@ -52,8 +58,22 @@ export function startOAuthServer(
         const PORT = 3000;
         const REDIRECT_URI = `http://localhost:${PORT}/callback`;
 
-        const appIdToUse = customAppId || META_CONFIG.appId;
-        const appSecretToUse = secretToUse || APP_SECRET;
+        // If mode is instagram, prioritize Instagram App ID
+        const resolvedIgAppId = customInstagramAppId || META_CONFIG.instagramAppId;
+        const resolvedIgSecret = customInstagramAppSecret || (process.env.INSTAGRAM_APP_SECRET || secretToUse || APP_SECRET);
+
+        let appIdToUse = customAppId || META_CONFIG.appId;
+        let appSecretToUse = secretToUse || APP_SECRET;
+
+        if (mode === 'instagram') {
+            if (resolvedIgAppId) {
+                appIdToUse = resolvedIgAppId;
+                appSecretToUse = resolvedIgSecret;
+            } else {
+                // If user didn't enter an Instagram App ID, notify clearly
+                console.warn('⚠️ No separate Instagram App ID found. Using Meta App ID, which may trigger "Invalid platform app" if Instagram business product is not configured.');
+            }
+        }
 
         // Scopes for Instagram Login for Business
         const IG_SCOPES = [

@@ -37,6 +37,8 @@ export default function ConnectSocial() {
     // Developer Settings State
     const [customAppId, setCustomAppId] = useState('');
     const [customAppSecret, setCustomAppSecret] = useState('');
+    const [customInstagramAppId, setCustomInstagramAppId] = useState('');
+    const [customInstagramAppSecret, setCustomInstagramAppSecret] = useState('');
     const [customGraphApiKey, setCustomGraphApiKey] = useState('');
     const [showSecret, setShowSecret] = useState(false);
     const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -56,6 +58,8 @@ export default function ConnectSocial() {
                     const metaConfig = res.data.meta_config || {};
                     setCustomAppId(metaConfig.appId || '');
                     setCustomAppSecret(metaConfig.appSecret || '');
+                    setCustomInstagramAppId(metaConfig.instagramAppId || '');
+                    setCustomInstagramAppSecret(metaConfig.instagramAppSecret || '');
                     setCustomGraphApiKey(metaConfig.graphApiKey || '');
                 }
             }
@@ -90,6 +94,12 @@ export default function ConnectSocial() {
     };
 
     const handleConnect = async (mode: 'instagram' | 'facebook' = 'instagram') => {
+        if (mode === 'instagram' && !customInstagramAppId) {
+            toast.error('Instagram App ID required for direct login. Check Developer Settings below or click "Connect via Facebook Page".', { duration: 6000 });
+            setAccordionValue("item-2");
+            return;
+        }
+
         setLoading(true);
         setConnectMode(mode);
         try {
@@ -147,6 +157,8 @@ export default function ConnectSocial() {
                     value: {
                         appId: customAppId,
                         appSecret: customAppSecret,
+                        instagramAppId: customInstagramAppId,
+                        instagramAppSecret: customInstagramAppSecret,
                         graphApiKey: customGraphApiKey
                     }
                 });
@@ -354,6 +366,38 @@ export default function ConnectSocial() {
                                                     >
                                                         {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                                     </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-3 border-t border-gray-200 dark:border-zinc-800 space-y-3">
+                                                <div className="space-y-0.5">
+                                                    <Label htmlFor="igAppId" className="text-xs font-semibold text-pink-600 dark:text-pink-400 flex items-center gap-1.5">
+                                                        <Instagram className="w-3.5 h-3.5" /> Instagram App ID (Direct Login)
+                                                    </Label>
+                                                    <p className="text-[11px] text-gray-500 dark:text-zinc-400">
+                                                        Meta Dashboard &gt; Products &gt; Instagram &gt; API setup with Instagram business login
+                                                    </p>
+                                                </div>
+                                                <Input
+                                                    id="igAppId"
+                                                    placeholder="Enter your Instagram App ID"
+                                                    value={customInstagramAppId}
+                                                    onChange={(e) => setCustomInstagramAppId(e.target.value)}
+                                                    className="h-9 bg-gray-50 dark:bg-zinc-800 font-mono text-xs"
+                                                />
+
+                                                <div className="space-y-0.5">
+                                                    <Label htmlFor="igAppSecret" className="text-xs font-semibold text-pink-600 dark:text-pink-400">
+                                                        Instagram App Secret
+                                                    </Label>
+                                                    <Input
+                                                        id="igAppSecret"
+                                                        type="password"
+                                                        placeholder="Enter your Instagram App Secret"
+                                                        value={customInstagramAppSecret}
+                                                        onChange={(e) => setCustomInstagramAppSecret(e.target.value)}
+                                                        className="h-9 bg-gray-50 dark:bg-zinc-800 font-mono text-xs"
+                                                    />
                                                 </div>
                                             </div>
 
