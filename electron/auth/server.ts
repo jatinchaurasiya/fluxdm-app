@@ -56,7 +56,7 @@ export function startOAuthServer(
 
         const app = express();
         const PORT = 3000;
-        const REDIRECT_URI = `http://localhost:${PORT}/callback`;
+        const REDIRECT_URI = META_CONFIG.redirectUri || `http://localhost:${PORT}/callback`;
 
         // If mode is instagram, prioritize Instagram App ID
         const resolvedIgAppId = customInstagramAppId || META_CONFIG.instagramAppId;
@@ -119,30 +119,47 @@ export function startOAuthServer(
                 let userName = 'Instagram Creator';
                 let profilePicture = '';
 
-                // Try Direct Instagram OAuth Token Exchange first (if mode is instagram or auto)
                 let igSuccess = false;
                 if (mode === 'instagram') {
+                    // Strip any hash fragments (e.g. #_ or #) per Meta specification
+                    const cleanCode = (code || '').split('#')[0].replace(/_$/, '').trim();
+                    const cleanRedirectUri = REDIRECT_URI.replace(/\/$/, '');
+                    console.log(`📍 Processing authorization code (length: ${cleanCode.length}, redirect_uri: ${cleanRedirectUri})`);
+
+                    // Send multipart/form-data POST to https://api.instagram.com/oauth/access_token
+                    // as explicitly required by Meta's Instagram Business Login specification (curl -F)
+                    const formData = new FormData();
+                    formData.append('client_id', appIdToUse);
+                    formData.append('client_secret', appSecretToUse);
+                    formData.append('grant_type', 'authorization_code');
+                    formData.append('redirect_uri', cleanRedirectUri);
+                    formData.append('code', cleanCode);
+
+                    console.log(`🔄 Exchanging authorization code for Instagram access token (client_id: ${appIdToUse}, redirect_uri: ${cleanRedirectUri})...`);
+
+                    let exchangeData: any = null;
                     try {
-                        console.log('🔄 Exchanging code with api.instagram.com/oauth/access_token...');
-                        const params = new URLSearchParams();
-                        params.append('client_id', appIdToUse);
-                        params.append('client_secret', appSecretToUse);
-                        params.append('grant_type', 'authorization_code');
-                        params.append('redirect_uri', REDIRECT_URI);
-                        params.append('code', code);
-
-                        const igTokenRes = await axios.post('https://api.instagram.com/oauth/access_token', params.toString(), {
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            timeout: 10000
+                        const res = await axios.post('https://api.instagram.com/oauth/access_token', formData, {
+                            timeout: 15000
                         });
+                        exchangeData = res.data;
+                    } catch (tokenErr: any) {
+                        const errData = tokenErr.response?.data;
+                        console.error('❌ Instagram Token Exchange Failed:');
+                        console.error('Status:', tokenErr.response?.status);
+                        console.error('Error Details:', JSON.stringify(errData || tokenErr.message));
+                        const userErrMsg = errData?.error_message || errData?.error?.message || tokenErr.message;
+                        throw new Error(`Instagram Token Exchange failed: ${userErrMsg}`);
+                    }
 
-                        const shortLivedToken = igTokenRes.data.access_token;
-                        const igUserId = igTokenRes.data.user_id;
+                    if (exchangeData && (exchangeData.access_token || exchangeData.data?.[0]?.access_token)) {
+                        const shortLivedToken = exchangeData.access_token || exchangeData.data?.[0]?.access_token;
+                        const igUserId = exchangeData.user_id || exchangeData.id || exchangeData.data?.[0]?.user_id;
 
-                        if (shortLivedToken && igUserId) {
-                            console.log(`✅ Direct Instagram short token obtained for user: ${igUserId}. Exchanging for 60-day token...`);
-                            
-                            // Exchange for 60-day long-lived token
+                        console.log(`✅ Direct Instagram short-lived token obtained for user: ${igUserId}. Exchanging for 60-day token...`);
+
+                        // Exchange for 60-day long-lived token
+                        try {
                             const longTokenRes = await axios.get('https://graph.instagram.com/access_token', {
                                 params: {
                                     grant_type: 'ig_exchange_token',
@@ -151,34 +168,34 @@ export function startOAuthServer(
                                 },
                                 timeout: 10000
                             });
-
                             finalToken = longTokenRes.data.access_token || shortLivedToken;
-                            igBusinessId = String(igUserId);
-                            pageId = String(igUserId);
-
-                            // Fetch Instagram profile info
-                            try {
-                                const profileRes = await axios.get('https://graph.instagram.com/v22.0/me', {
-                                    params: {
-                                        fields: 'id,username,name,account_type,profile_picture_url',
-                                        access_token: finalToken
-                                    },
-                                    timeout: 8000
-                                });
-                                userName = profileRes.data.username || profileRes.data.name || `ig_${igUserId}`;
-                                profilePicture = profileRes.data.profile_picture_url || '';
-                            } catch (e: any) {
-                                console.warn('Could not fetch Instagram profile picture/name, using defaults:', e.message);
-                                userName = `ig_${igUserId}`;
-                            }
-
-                            igSuccess = true;
+                        } catch (longErr: any) {
+                            console.warn('Long-lived token exchange via graph.instagram.com failed, keeping short-lived token:', longErr.message);
+                            finalToken = shortLivedToken;
                         }
-                    } catch (igErr: any) {
-                        console.warn('Direct Instagram token exchange did not succeed:', igErr.response?.data || igErr.message);
-                        if (mode === 'instagram') {
-                            throw new Error(igErr.response?.data?.error_message || igErr.response?.data?.error?.message || igErr.message);
+
+                        igBusinessId = String(igUserId);
+                        pageId = String(igUserId);
+
+                        // Fetch Instagram profile info
+                        try {
+                            const profileRes = await axios.get('https://graph.instagram.com/v22.0/me', {
+                                params: {
+                                    fields: 'id,username,name,account_type,profile_picture_url',
+                                    access_token: finalToken
+                                },
+                                timeout: 8000
+                            });
+                            userName = profileRes.data.username || profileRes.data.name || `ig_${igUserId}`;
+                            profilePicture = profileRes.data.profile_picture_url || '';
+                        } catch (e: any) {
+                            console.warn('Could not fetch Instagram profile picture/name from graph.instagram.com:', e.message);
+                            userName = `ig_${igUserId}`;
                         }
+
+                        igSuccess = true;
+                    } else {
+                        throw new Error('No access_token returned by Instagram in exchange response.');
                     }
                 }
 
@@ -410,8 +427,8 @@ export function startOAuthServer(
 
             let authUrl = '';
             if (mode === 'instagram') {
-                // Direct Instagram Login for Business - Zero Facebook Page requirement
-                authUrl = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${appIdToUse}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${IG_SCOPES}`;
+                // Official Instagram Business Login Embed URL format
+                authUrl = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${appIdToUse}&redirect_uri=${REDIRECT_URI.replace(/\/$/, '')}&response_type=code&scope=${IG_SCOPES}`;
             } else {
                 // Facebook Graph OAuth
                 authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appIdToUse}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${FB_SCOPES}`;

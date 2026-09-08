@@ -15,6 +15,74 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    // 0. OAuth Callback Relay (GET /callback) - Bridges Instagram HTTPS redirect to local desktop app
+    if (request.method === 'GET' && (url.pathname === '/callback' || url.pathname === '/callback/')) {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      const errorDescription = url.searchParams.get('error_description');
+
+      if (error) {
+        return new Response(`OAuth Error: ${errorDescription || error}`, { status: 400 });
+      }
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FluxDM - Connecting...</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #09090b;
+      color: #fff;
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      padding: 2.5rem;
+      border-radius: 1.25rem;
+      text-align: center;
+      max-width: 420px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .spinner {
+      border: 3px solid #27272a;
+      border-top: 3px solid #f43f5e;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1.5rem;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    h2 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    p { color: #a1a1aa; font-size: 0.95rem; line-height: 1.5; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h2>Connecting to FluxDM...</h2>
+    <p>Completing authorization. Redirecting to your desktop app...</p>
+  </div>
+  <script>
+    const code = ${JSON.stringify(code || '')};
+    window.location.href = 'http://localhost:3000/callback?code=' + encodeURIComponent(code);
+  </script>
+</body>
+</html>`;
+
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    }
+
     // 1. Meta Webhook Verification (GET /webhook)
     if (request.method === 'GET' && url.pathname === '/webhook') {
       const mode = url.searchParams.get('hub.mode');
