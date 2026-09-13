@@ -4,7 +4,7 @@ import electron from 'electron';
 const { shell } = electron;
 import db from '../database/db';
 import { META_CONFIG } from '../config';
-import { APP_SECRET } from '../secret';
+import { APP_SECRET, INSTAGRAM_APP_SECRET } from '../secret';
 import { Server } from 'http';
 
 let server: Server | null = null;
@@ -56,21 +56,20 @@ export function startOAuthServer(
 
         const app = express();
         const PORT = 3000;
-        const REDIRECT_URI = META_CONFIG.redirectUri || `http://localhost:${PORT}/callback`;
+        const baseRedirectUri = (META_CONFIG.redirectUri || `http://localhost:${PORT}/callback`).trim().replace(/\/+$/, '');
 
         // If mode is instagram, prioritize Instagram App ID
-        const resolvedIgAppId = customInstagramAppId || META_CONFIG.instagramAppId;
-        const resolvedIgSecret = customInstagramAppSecret || (process.env.INSTAGRAM_APP_SECRET || secretToUse || APP_SECRET);
+        const resolvedIgAppId = (customInstagramAppId || META_CONFIG.instagramAppId || '').trim();
+        const resolvedIgSecret = (customInstagramAppSecret || INSTAGRAM_APP_SECRET || secretToUse || APP_SECRET || '').trim();
 
-        let appIdToUse = customAppId || META_CONFIG.appId;
-        let appSecretToUse = secretToUse || APP_SECRET;
+        let appIdToUse = (customAppId || META_CONFIG.appId || '').trim();
+        let appSecretToUse = (secretToUse || APP_SECRET || '').trim();
 
         if (mode === 'instagram') {
             if (resolvedIgAppId) {
                 appIdToUse = resolvedIgAppId;
                 appSecretToUse = resolvedIgSecret;
             } else {
-                // If user didn't enter an Instagram App ID, notify clearly
                 console.warn('⚠️ No separate Instagram App ID found. Using Meta App ID, which may trigger "Invalid platform app" if Instagram business product is not configured.');
             }
         }
@@ -120,26 +119,34 @@ export function startOAuthServer(
                 let profilePicture = '';
 
                 let igSuccess = false;
+                // Extract code cleanly without corrupting trailing characters
+                const rawCode = (code || '').trim();
+                const cleanCode = rawCode.split('#')[0].trim();
+
+                // Propagate exact redirect_uri from Cloudflare relay if available, else normalized baseRedirectUri
+                const queryRedirectUri = typeof req.query.redirect_uri === 'string' ? req.query.redirect_uri.trim().replace(/\/+$/, '') : '';
+                const effectiveRedirectUri = queryRedirectUri || baseRedirectUri;
+
                 if (mode === 'instagram') {
-                    // Strip any hash fragments (e.g. #_ or #) per Meta specification
-                    const cleanCode = (code || '').split('#')[0].replace(/_$/, '').trim();
-                    const cleanRedirectUri = REDIRECT_URI.replace(/\/$/, '');
-                    console.log(`📍 Processing authorization code (length: ${cleanCode.length}, redirect_uri: ${cleanRedirectUri})`);
+                    console.log(`📍 Processing authorization code (length: ${cleanCode.length}, redirect_uri: ${effectiveRedirectUri}, client_id: ${appIdToUse})`);
 
-                    // Send multipart/form-data POST to https://api.instagram.com/oauth/access_token
-                    // as explicitly required by Meta's Instagram Business Login specification (curl -F)
-                    const formData = new FormData();
-                    formData.append('client_id', appIdToUse);
-                    formData.append('client_secret', appSecretToUse);
-                    formData.append('grant_type', 'authorization_code');
-                    formData.append('redirect_uri', cleanRedirectUri);
-                    formData.append('code', cleanCode);
+                    if (appSecretToUse.length !== 32) {
+                        console.warn(`⚠️ Warning: Instagram App Secret in use has length ${appSecretToUse.length}. Meta/Instagram App Secrets are exactly 32 hexadecimal characters. Check your .env file!`);
+                    }
 
-                    console.log(`🔄 Exchanging authorization code for Instagram access token (client_id: ${appIdToUse}, redirect_uri: ${cleanRedirectUri})...`);
-
+                    // Send request with URLSearchParams (application/x-www-form-urlencoded)
                     let exchangeData: any = null;
                     try {
-                        const res = await axios.post('https://api.instagram.com/oauth/access_token', formData, {
+                        const params = new URLSearchParams();
+                        params.append('client_id', appIdToUse);
+                        params.append('client_secret', appSecretToUse);
+                        params.append('grant_type', 'authorization_code');
+                        params.append('redirect_uri', effectiveRedirectUri);
+                        params.append('code', cleanCode);
+
+                        console.log(`🔄 Exchanging authorization code (client_id: ${appIdToUse}, redirect_uri: ${effectiveRedirectUri})...`);
+                        const res = await axios.post('https://api.instagram.com/oauth/access_token', params.toString(), {
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                             timeout: 15000
                         });
                         exchangeData = res.data;
@@ -201,13 +208,13 @@ export function startOAuthServer(
 
                 // Fallback to Facebook Graph API OAuth flow if not resolved via Direct Instagram
                 if (!igSuccess) {
-                    console.log('🔄 Running Facebook Graph API OAuth exchange...');
+                    console.log(`🔄 Running Facebook Graph API OAuth exchange (client_id: ${appIdToUse}, redirect_uri: ${effectiveRedirectUri})...`);
                     const shortTokenResponse = await axios.get('https://graph.facebook.com/v18.0/oauth/access_token', {
                         params: {
                             client_id: appIdToUse,
                             client_secret: appSecretToUse,
-                            redirect_uri: REDIRECT_URI,
-                            code: code
+                            redirect_uri: effectiveRedirectUri,
+                            code: cleanCode
                         },
                         timeout: 10000
                     });
@@ -371,39 +378,117 @@ export function startOAuthServer(
             } catch (error: any) {
                 console.error('❌ OAuth Error:', error?.response?.data || error.message);
 
+                const rawErrorMsg = error?.response?.data?.error?.message || error?.response?.data?.error_message || error.message || 'Unknown error';
+                const isRedirectMismatch = rawErrorMsg.toLowerCase().includes('redirect_uri') || rawErrorMsg.toLowerCase().includes('verification code');
+
                 res.status(500).send(`
                     <!DOCTYPE html>
                     <html>
                         <head>
                             <title>FluxDM - Connection Failed</title>
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
                             <style>
                                 body {
                                     background: #09090b;
                                     color: white;
-                                    font-family: sans-serif;
+                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                                     display: flex;
                                     align-items: center;
                                     justify-content: center;
-                                    height: 100vh;
+                                    min-height: 100vh;
                                     margin: 0;
+                                    padding: 1.5rem;
+                                    box-sizing: border-box;
                                 }
                                 .box {
-                                    background: #18181b;
-                                    border: 1px solid #ef4444;
+                                    background: rgba(24, 24, 27, 0.95);
+                                    border: 1px solid rgba(239, 68, 68, 0.3);
                                     padding: 2.5rem;
-                                    border-radius: 16px;
+                                    border-radius: 20px;
                                     text-align: center;
-                                    max-width: 460px;
+                                    max-width: 520px;
+                                    width: 100%;
+                                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
                                 }
-                                h1 { color: #ef4444; margin-top: 0; }
-                                p { color: #a1a1aa; font-size: 0.9rem; }
+                                .badge {
+                                    display: inline-flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    width: 60px;
+                                    height: 60px;
+                                    border-radius: 50%;
+                                    background: rgba(239, 68, 68, 0.15);
+                                    color: #ef4444;
+                                    font-size: 1.75rem;
+                                    margin-bottom: 1rem;
+                                }
+                                h1 { color: #f87171; margin: 0 0 0.5rem 0; font-size: 1.5rem; }
+                                .error-desc { color: #d4d4d8; font-size: 0.92rem; line-height: 1.5; margin: 0.5rem 0 1.5rem 0; }
+                                .diagnostics {
+                                    background: #121215;
+                                    border: 1px solid #27272a;
+                                    border-radius: 12px;
+                                    padding: 1rem;
+                                    text-align: left;
+                                    font-family: monospace;
+                                    font-size: 0.75rem;
+                                    color: #a1a1aa;
+                                    margin-bottom: 1.5rem;
+                                    word-break: break-all;
+                                }
+                                .diag-row { margin: 0.25rem 0; }
+                                .diag-label { color: #71717a; }
+                                .diag-value { color: #f43f5e; }
+                                .tip {
+                                    background: rgba(245, 158, 11, 0.1);
+                                    border: 1px solid rgba(245, 158, 11, 0.25);
+                                    border-radius: 10px;
+                                    padding: 0.75rem 1rem;
+                                    font-size: 0.8rem;
+                                    color: #fbbf24;
+                                    text-align: left;
+                                    margin-bottom: 1.5rem;
+                                }
+                                .btn {
+                                    display: inline-block;
+                                    background: #f43f5e;
+                                    color: white;
+                                    padding: 0.75rem 1.5rem;
+                                    border-radius: 10px;
+                                    text-decoration: none;
+                                    font-weight: 600;
+                                    font-size: 0.88rem;
+                                    transition: opacity 0.2s;
+                                }
+                                .btn:hover { opacity: 0.9; }
+                                .auto-hint { margin-top: 1.25rem; font-size: 0.75rem; color: #71717a; }
                             </style>
                         </head>
                         <body>
                             <div class="box">
+                                <div class="badge">⚠️</div>
                                 <h1>Connection Failed</h1>
-                                <p>${error?.response?.data?.error?.message || error.message}</p>
-                                <p style="margin-top: 1.5rem; font-size: 0.8rem; color: #71717a;">You can close this tab and try again in the app.</p>
+                                <p class="error-desc">${rawErrorMsg}</p>
+
+                                <div class="diagnostics">
+                                    <div class="diag-row"><span class="diag-label">App ID:</span> <span class="diag-value">${appIdToUse || 'None'}</span></div>
+                                    <div class="diag-row"><span class="diag-label">Mode:</span> <span class="diag-value">${mode}</span></div>
+                                    <div class="diag-row"><span class="diag-label">Redirect URI:</span> <span class="diag-value">${baseRedirectUri}</span></div>
+                                    <div class="diag-row"><span class="diag-label">Secret Format:</span> <span class="diag-value" style="color: ${appSecretToUse.length === 32 ? '#4ade80' : '#f87171'};">${appSecretToUse.length} chars ${appSecretToUse.length === 32 ? '(Valid 32-char hex)' : '(INVALID: Meta secrets must be exactly 32 chars)'}</span></div>
+                                </div>
+
+                                ${appSecretToUse.length !== 32 ? `
+                                    <div class="tip" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #fca5a5;">
+                                        🚨 <strong>Secret Issue Detected:</strong> Your App Secret in <code>.env</code> has ${appSecretToUse.length} characters instead of 32 characters. Meta App Secrets are always 32-character hex strings (found in Meta Dashboard > App Settings > Basic, or Instagram API Setup). Please check your <code>.env</code>.
+                                    </div>
+                                ` : isRedirectMismatch ? `
+                                    <div class="tip">
+                                        💡 <strong>Root Fix Tip:</strong> In Meta Dashboard > Instagram > API setup with Instagram login, confirm that your <strong>Valid OAuth Redirect URIs</strong> contains <code>${baseRedirectUri}</code> and that your <strong>Instagram App Secret</strong> is correctly set in <code>.env</code>. Alternatively, use <strong>Connect via Facebook Page</strong> in FluxDM.
+                                    </div>
+                                ` : ''}
+
+                                <a href="fluxdm://auth/callback" class="btn">Return to FluxDM</a>
+                                <p class="auto-hint">You can close this tab and retry in the desktop app.</p>
                             </div>
                         </body>
                     </html>
@@ -428,10 +513,10 @@ export function startOAuthServer(
             let authUrl = '';
             if (mode === 'instagram') {
                 // Official Instagram Business Login Embed URL format
-                authUrl = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${appIdToUse}&redirect_uri=${REDIRECT_URI.replace(/\/$/, '')}&response_type=code&scope=${IG_SCOPES}`;
+                authUrl = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${encodeURIComponent(appIdToUse)}&redirect_uri=${encodeURIComponent(baseRedirectUri)}&response_type=code&scope=${encodeURIComponent(IG_SCOPES)}`;
             } else {
                 // Facebook Graph OAuth
-                authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appIdToUse}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${FB_SCOPES}`;
+                authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${encodeURIComponent(appIdToUse)}&redirect_uri=${encodeURIComponent(baseRedirectUri)}&scope=${encodeURIComponent(FB_SCOPES)}`;
             }
 
             console.log(`🌐 Initiating ${mode.toUpperCase()} OAuth in browser: ${authUrl}`);

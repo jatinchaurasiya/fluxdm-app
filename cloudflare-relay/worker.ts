@@ -25,6 +25,8 @@ export default {
         return new Response(`OAuth Error: ${errorDescription || error}`, { status: 400 });
       }
 
+      const effectiveRedirectUri = `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+
       const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -73,7 +75,8 @@ export default {
   </div>
   <script>
     const code = ${JSON.stringify(code || '')};
-    window.location.href = 'http://localhost:3000/callback?code=' + encodeURIComponent(code);
+    const redirectUri = ${JSON.stringify(effectiveRedirectUri)};
+    window.location.href = 'http://localhost:3000/callback?code=' + encodeURIComponent(code) + '&redirect_uri=' + encodeURIComponent(redirectUri);
   </script>
 </body>
 </html>`;
