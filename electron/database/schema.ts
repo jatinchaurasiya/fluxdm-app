@@ -186,10 +186,16 @@ export const initDB = () => {
       user_id TEXT PRIMARY KEY,
       account_id INTEGER,
       state TEXT DEFAULT 'NONE', 
+      current_flow_id TEXT,
+      step TEXT,
+      context_json TEXT,
       last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
   addColumnSafe('conversation_state', 'account_id', 'INTEGER');
+  addColumnSafe('conversation_state', 'current_flow_id', 'TEXT');
+  addColumnSafe('conversation_state', 'step', 'TEXT');
+  addColumnSafe('conversation_state', 'context_json', 'TEXT');
 
   // 7. Logs (Dashboard Dependency)
   db.prepare(`

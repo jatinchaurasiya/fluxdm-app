@@ -205,16 +205,36 @@ export function registerIpcHandlers() {
                 // Wizard Mode
                 // Data comes in as { name, triggerKeyword, messageText, settings, ... }
                 const wizardConfig = {
-                    reply_text: data.reply_text,  // Mapped from frontend (Public Reply)
-                    dm_text: data.dm_text, // Legacy simple DM
+                    reply_text: data.reply_text,  // Public comment reply
+                    dm_text: data.dm_text, // Legacy fallback
 
-                    // Smart Follow Gate Fields
+                    // Smart Follow Sequence Fields (Fully Customizable)
                     hook_text: data.hook_text,
-                    verification_keyword: data.verification_keyword,
-                    is_follow_gated: data.is_follow_gated,
+                    hook_button_text: data.hook_button_text || 'Send me the link',
+                    is_follow_gated: Boolean(data.is_follow_gated),
                     gate_text: data.gate_text,
-                    reward_text: data.reward_text,
-                    reward_link: data.reward_link,
+                    visit_profile_button_text: data.visit_profile_button_text || 'Visit Profile',
+                    profile_url: data.profile_url || '',
+                    verify_button_text: data.verify_button_text || "I'm following ✅",
+                    reward_text: data.reward_text || 'Thanks for your comment!!',
+                    reward_button_text: data.reward_button_text || data.reward_buttons?.[0]?.title || 'Here is Your Link!',
+                    reward_link: data.reward_link || data.reward_buttons?.[0]?.url || '',
+                    secondary_button_text: data.secondary_button_text || data.reward_buttons?.[1]?.title || '',
+                    secondary_link: data.secondary_link || data.reward_buttons?.[1]?.url || '',
+                    reward_buttons: Array.isArray(data.reward_buttons) && data.reward_buttons.length > 0
+                        ? data.reward_buttons.slice(0, 5)
+                        : [
+                            {
+                                id: '1',
+                                title: data.reward_button_text || 'Here is Your Link!',
+                                url: data.reward_link || 'https://fluxdm.space'
+                            },
+                            ...(data.secondary_button_text && data.secondary_link ? [{
+                                id: '2',
+                                title: data.secondary_button_text,
+                                url: data.secondary_link
+                            }] : [])
+                        ],
 
                     settings: data.settings
                 };
@@ -225,16 +245,19 @@ export function registerIpcHandlers() {
                 if (data.triggerKeyword) triggerKeyword = data.triggerKeyword;
             }
 
+            const attachedMediaId = data.attached_media_id || null;
+
             // Upsert into DB
             const stmt = db.prepare(`
-                INSERT INTO automation_flows (id, name, nodes_json, edges_json, trigger_keyword, trigger_type, is_active)
-                VALUES (@id, @name, @nodes_json, @edges_json, @trigger_keyword, @trigger_type, 1)
+                INSERT INTO automation_flows (id, name, nodes_json, edges_json, trigger_keyword, trigger_type, attached_media_id, is_active)
+                VALUES (@id, @name, @nodes_json, @edges_json, @trigger_keyword, @trigger_type, @attached_media_id, 1)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     nodes_json=excluded.nodes_json,
                     edges_json=excluded.edges_json,
                     trigger_keyword=excluded.trigger_keyword,
                     trigger_type=excluded.trigger_type,
+                    attached_media_id=excluded.attached_media_id,
                     created_at=CURRENT_TIMESTAMP
             `);
 
@@ -244,7 +267,8 @@ export function registerIpcHandlers() {
                 nodes_json: nodesJson,
                 edges_json: edgesJson,
                 trigger_keyword: triggerKeyword,
-                trigger_type: triggerType
+                trigger_type: triggerType,
+                attached_media_id: attachedMediaId
             });
 
             return { success: true, id: flowId };
