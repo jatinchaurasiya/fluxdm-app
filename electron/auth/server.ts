@@ -6,6 +6,7 @@ import db from '../database/db';
 import { META_CONFIG } from '../config';
 import { APP_SECRET, INSTAGRAM_APP_SECRET } from '../secret';
 import { Server } from 'http';
+import dotenv from 'dotenv';
 
 let server: Server | null = null;
 
@@ -32,6 +33,9 @@ export function startOAuthServer(
     explicitMode?: 'instagram' | 'facebook'
 ): Promise<string> {
     return new Promise((resolve, reject) => {
+        // Ensure latest .env variables are loaded dynamically
+        dotenv.config({ override: true });
+
         // Close any existing server instance
         if (server) {
             server.close();
@@ -56,14 +60,20 @@ export function startOAuthServer(
 
         const app = express();
         const PORT = 3000;
-        const baseRedirectUri = (META_CONFIG.redirectUri || `http://localhost:${PORT}/callback`).trim().replace(/\/+$/, '');
+        const liveRedirectUri = (process.env.META_REDIRECT_URI || META_CONFIG.redirectUri || `http://localhost:${PORT}/callback`).trim().replace(/\/+$/, '');
+        const baseRedirectUri = liveRedirectUri;
 
         // If mode is instagram, prioritize Instagram App ID
-        const resolvedIgAppId = (customInstagramAppId || META_CONFIG.instagramAppId || '').trim();
-        const resolvedIgSecret = (customInstagramAppSecret || INSTAGRAM_APP_SECRET || secretToUse || APP_SECRET || '').trim();
+        const liveIgAppId = (process.env.INSTAGRAM_APP_ID || META_CONFIG.instagramAppId || '').trim();
+        const liveIgSecret = (process.env.INSTAGRAM_APP_SECRET || INSTAGRAM_APP_SECRET || '').trim();
+        const liveMetaAppId = (process.env.META_APP_ID || META_CONFIG.appId || '').trim();
+        const liveMetaSecret = (process.env.META_APP_SECRET || APP_SECRET || '').trim();
 
-        let appIdToUse = (customAppId || META_CONFIG.appId || '').trim();
-        let appSecretToUse = (secretToUse || APP_SECRET || '').trim();
+        const resolvedIgAppId = (customInstagramAppId || liveIgAppId).trim();
+        const resolvedIgSecret = (customInstagramAppSecret || liveIgSecret || secretToUse || liveMetaSecret).trim();
+
+        let appIdToUse = (customAppId || liveMetaAppId).trim();
+        let appSecretToUse = (secretToUse || liveMetaSecret).trim();
 
         if (mode === 'instagram') {
             if (resolvedIgAppId) {
