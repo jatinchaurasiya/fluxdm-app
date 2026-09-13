@@ -148,10 +148,10 @@ function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.cjs');
 
   mainWindow = new BrowserWindow({
-    width: 1300,
-    height: 850,
-    minWidth: 1024,
-    minHeight: 768,
+    width: 1200,
+    height: 760,
+    minWidth: 900,
+    minHeight: 580,
     show: true,
     title: 'FluxDM Automation',
     icon: path.join(process.env.PUBLIC || path.join(__dirname, '../../public'), 'vite.svg'),

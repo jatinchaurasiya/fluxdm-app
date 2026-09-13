@@ -14,11 +14,11 @@ export default function AppLayout({ sidebar, children, mobileHeader, bottomNav }
       {sidebar}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
         {mobileHeader}
 
         {/* Clean Single Scroll View */}
-        <main className="flex-1 h-full overflow-hidden">
+        <main className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
           {children}
         </main>
 

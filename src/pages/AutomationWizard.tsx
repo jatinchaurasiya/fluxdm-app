@@ -147,23 +147,61 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
 
     return (
 
-        <div className="p-8 h-full overflow-y-auto bg-gray-50/50 dark:bg-black flex flex-col items-center">
+        <div className="p-6 md:p-8 flex-1 min-h-0 w-full overflow-y-auto bg-gray-50/50 dark:bg-black flex flex-col items-center pb-28">
 
-            {/* Stepper Header */}
-            <div className="w-full max-w-[800px] mb-8">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-xl font-bold dark:text-white">{t('automations.wizard.title')}</h2>
-                    <span className="text-sm text-gray-500 dark:text-zinc-500">Step {step} of 3</span>
+            {/* Stepper Header with Persistent Action Buttons */}
+            <div className={`transition-all duration-300 mb-6 ${isWide ? 'w-full max-w-[1100px]' : 'w-full max-w-[800px]'}`}>
+                <div className="flex items-center justify-between mb-3">
+                    <div>
+                        <h2 className="text-xl font-bold dark:text-white tracking-tight">{t('automations.wizard.title')}</h2>
+                        <span className="text-xs font-medium text-gray-500 dark:text-zinc-400">
+                            Step {step} of 3 • <span className="text-black dark:text-white font-semibold">{step === 1 ? t('automations.wizard.step_1') : step === 2 ? t('automations.wizard.step_2') : t('automations.wizard.step_3')}</span>
+                        </span>
+                    </div>
+
+                    {/* Quick Action Navigation Bar in Header */}
+                    <div className="flex items-center gap-2">
+                        {step > 1 && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={prevStep}
+                                className="h-9 px-3 text-xs font-medium border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-700"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> {t('automations.wizard.previous')}
+                            </Button>
+                        )}
+
+                        {step < 3 ? (
+                            <Button
+                                size="sm"
+                                onClick={nextStep}
+                                className="h-9 px-4 text-xs font-semibold bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 shadow-sm"
+                            >
+                                {t('automations.wizard.next')} <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                            </Button>
+                        ) : (
+                            <Button
+                                size="sm"
+                                onClick={handleLaunch}
+                                className="h-9 px-5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                                isLoading={loading}
+                            >
+                                {!loading && <CheckCircle className="w-3.5 h-3.5 mr-1.5" />} {t('automations.wizard.launch_button')}
+                            </Button>
+                        )}
+                    </div>
                 </div>
+
                 <div className="h-2 bg-gray-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                     <div
                         className={`h-full bg-black dark:bg-white transition-all duration-300 ease-out ${step === 1 ? 'w-1/3' : step === 2 ? 'w-2/3' : 'w-full'}`}
                     />
                 </div>
                 <div className="flex justify-between mt-2 text-xs font-medium text-gray-500 dark:text-zinc-500 uppercase tracking-wide">
-                    <span className={step >= 1 ? 'text-black dark:text-white' : ''}>1. {t('automations.wizard.step_1')}</span>
-                    <span className={step >= 2 ? 'text-black dark:text-white' : ''}>2. {t('automations.wizard.step_2')}</span>
-                    <span className={step >= 3 ? 'text-black dark:text-white' : ''}>3. {t('automations.wizard.step_3')}</span>
+                    <span className={step >= 1 ? 'text-black dark:text-white font-semibold' : ''}>1. {t('automations.wizard.step_1')}</span>
+                    <span className={step >= 2 ? 'text-black dark:text-white font-semibold' : ''}>2. {t('automations.wizard.step_2')}</span>
+                    <span className={step >= 3 ? 'text-black dark:text-white font-semibold' : ''}>3. {t('automations.wizard.step_3')}</span>
                 </div>
             </div>
 
@@ -459,7 +497,7 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
                         </div>
                     )}
 
-                    <CardFooter className="flex justify-between border-t border-gray-100 dark:border-zinc-800 pt-6 pb-6 px-8">
+                    <CardFooter className="flex justify-between border-t border-gray-100 dark:border-zinc-800 pt-5 pb-5 px-8 bg-gray-50/70 dark:bg-zinc-900/70 rounded-b-xl">
                         <Button
                             variant="ghost"
                             onClick={prevStep}
@@ -470,11 +508,11 @@ export default function AutomationWizard({ onNavigate }: AutomationWizardProps) 
                         </Button>
 
                         {step < 3 ? (
-                            <Button onClick={nextStep} className="bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200">
+                            <Button onClick={nextStep} className="bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 px-6 font-semibold shadow-sm">
                                 {t('automations.wizard.next')} <ArrowRight className="w-4 h-4 ml-2" />
                             </Button>
                         ) : (
-                            <Button onClick={handleLaunch} className="bg-green-600 hover:bg-green-700 text-white px-8" isLoading={loading}>
+                            <Button onClick={handleLaunch} className="bg-green-600 hover:bg-green-700 text-white px-8 font-semibold shadow-sm" isLoading={loading}>
                                 {!loading && <CheckCircle className="w-4 h-4 mr-2" />} {t('automations.wizard.launch_button')}
                             </Button>
                         )}

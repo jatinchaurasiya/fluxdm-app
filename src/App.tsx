@@ -108,9 +108,10 @@ function App() {
         }
       >
         {renderPage()}
-        <Tour />
-        <Toaster />
       </AppLayout>
+
+      <Tour />
+      <Toaster />
 
       <DevicePairingModal
         isOpen={mobilePairingOpen}
