@@ -1,8 +1,10 @@
 import electron from 'electron';
 const { ipcMain, shell, dialog, app, BrowserWindow } = electron;
 import fs from 'node:fs';
+import path from 'path';
 import axios from 'axios';
 import db from './database/db';
+import { processJobById } from './workers/scheduler';
 import { randomUUID } from 'crypto';
 import { startOAuthServer } from './auth/server';
 import { 
@@ -636,20 +638,140 @@ export function registerIpcHandlers() {
     // ------------------------------------------------------------------------
     // 📅 SCHEDULER Handlers
     // ------------------------------------------------------------------------
-    // ------------------------------------------------------------------------
-    // 📅 SCHEDULER Handlers
-    // ------------------------------------------------------------------------
-    ipcMain.handle('schedule-post', async (_event, { files, caption, date, automationId, mediaType }) => {
+    ipcMain.handle('select-media-file', async (_event, { mediaType }: { mediaType: string }) => {
         try {
-            const filePathsJson = JSON.stringify(files || []);
-            db.prepare(`
-                INSERT INTO scheduled_posts (file_path, caption, publish_at, linked_flow_id, status, media_type)
-                VALUES (?, ?, ?, ?, 'PENDING', ?)
-            `).run(filePathsJson, caption, date, automationId || null, mediaType || 'REEL');
+            let filters: { name: string; extensions: string[] }[] = [];
+            const type = (mediaType || 'REEL').toUpperCase();
 
-            return { success: true };
+            if (type === 'REEL') {
+                filters = [
+                    { name: 'Video Files (*.mp4, *.mov, *.m4v)', extensions: ['mp4', 'mov', 'm4v', 'webm'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ];
+            } else if (type === 'IMAGE') {
+                filters = [
+                    { name: 'Image Files (*.jpg, *.png, *.webp)', extensions: ['jpg', 'jpeg', 'png', 'webp'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ];
+            } else if (type === 'CAROUSEL') {
+                filters = [
+                    { name: 'Photos & Videos', extensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ];
+            } else {
+                filters = [
+                    { name: 'Story Media', extensions: ['mp4', 'mov', 'jpg', 'jpeg', 'png', 'webp'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ];
+            }
+
+            const result = await dialog.showOpenDialog({
+                title: `Select ${type} Media`,
+                properties: ['openFile', ...(type === 'CAROUSEL' ? ['multiSelections' as const] : [])],
+                filters
+            });
+
+            if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+                return { canceled: true, filePaths: [] };
+            }
+
+            return { canceled: false, filePaths: result.filePaths };
+        } catch (err: any) {
+            console.error('❌ Select Media Error:', err);
+            return { canceled: true, error: err.message, filePaths: [] };
+        }
+    });
+
+    ipcMain.handle('read-media-preview', async (_event, { filePath }: { filePath: string }) => {
+        try {
+            if (!filePath || !fs.existsSync(filePath)) {
+                return { success: false, error: 'File does not exist' };
+            }
+            const buffer = fs.readFileSync(filePath);
+            const ext = path.extname(filePath).toLowerCase();
+            let mimeType = 'video/mp4';
+            if (ext === '.mov') mimeType = 'video/quicktime';
+            else if (ext === '.webm') mimeType = 'video/webm';
+            else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+            else if (ext === '.png') mimeType = 'image/png';
+            else if (ext === '.webp') mimeType = 'image/webp';
+
+            return { success: true, buffer, mimeType };
+        } catch (err: any) {
+            return { success: false, error: err.message };
+        }
+    });
+
+    ipcMain.handle('schedule-post', async (_event, { files, caption, date, automationId, mediaType, accountId }) => {
+        try {
+            // Resolve Account ID
+            let resolvedAccountId = accountId;
+            if (!resolvedAccountId) {
+                const config = db.prepare('SELECT active_account_id FROM user_config LIMIT 1').get() as any;
+                resolvedAccountId = config?.active_account_id;
+            }
+            if (!resolvedAccountId) {
+                const activeAcc = db.prepare('SELECT id FROM accounts WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get() as any;
+                resolvedAccountId = activeAcc?.id || null;
+            }
+
+            // Normalize publish_at to ISO UTC format for reliable SQLite comparisons
+            let publishUtc = date;
+            try {
+                const parsed = new Date(date);
+                if (!isNaN(parsed.getTime())) {
+                    publishUtc = parsed.toISOString();
+                }
+            } catch {
+                publishUtc = date;
+            }
+
+            // Ensure media directory exists in AppData
+            const storageDir = path.join(app.getPath('userData'), 'scheduled_media');
+            if (!fs.existsSync(storageDir)) {
+                fs.mkdirSync(storageDir, { recursive: true });
+            }
+
+            // Copy and permanently preserve local media files
+            const rawFiles = Array.isArray(files) ? files : (files ? [files] : []);
+            const preservedPaths: string[] = [];
+
+            for (const item of rawFiles) {
+                if (typeof item === 'string' && fs.existsSync(item)) {
+                    const ext = path.extname(item) || '.mp4';
+                    const base = path.basename(item, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const safeName = `${Date.now()}_${base}${ext}`;
+                    const targetFile = path.join(storageDir, safeName);
+                    fs.copyFileSync(item, targetFile);
+                    preservedPaths.push(targetFile);
+                    console.log(`📦 Preserved media file to app storage: ${targetFile}`);
+                } else if (typeof item === 'string') {
+                    preservedPaths.push(item);
+                }
+            }
+
+            const filePathsJson = JSON.stringify(preservedPaths.length > 0 ? preservedPaths : rawFiles);
+            const normalizedType = (mediaType || 'REEL').toUpperCase();
+
+            const insertResult = db.prepare(`
+                INSERT INTO scheduled_posts (account_id, file_path, caption, publish_at, linked_flow_id, status, media_type)
+                VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
+            `).run(resolvedAccountId, filePathsJson, caption || '', publishUtc, automationId || null, normalizedType);
+
+            return { success: true, id: insertResult.lastInsertRowid };
         } catch (error: any) {
             console.error('❌ Schedule Error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('publish-scheduled-post-now', async (_event, { id }: { id: number }) => {
+        try {
+            console.log(`⚡ Immediate publish requested for post #${id}`);
+            const result = await processJobById(Number(id));
+            return result;
+        } catch (error: any) {
+            console.error('❌ Immediate Publish Error:', error);
             return { success: false, error: error.message };
         }
     });
@@ -657,16 +779,20 @@ export function registerIpcHandlers() {
     ipcMain.handle('get-scheduled-posts', async (_event, { startDate, endDate } = {}) => {
         try {
             let posts;
-            const querySelect = `SELECT *, linked_flow_id as automation_id FROM scheduled_posts`;
+            const querySelect = `
+                SELECT sp.*, sp.linked_flow_id as automation_id, a.username as account_username 
+                FROM scheduled_posts sp 
+                LEFT JOIN accounts a ON sp.account_id = a.id
+            `;
             if (startDate && endDate) {
                 posts = db.prepare(`
                     ${querySelect} 
-                    WHERE publish_at BETWEEN ? AND ?
-                    ORDER BY publish_at ASC
+                    WHERE sp.publish_at BETWEEN ? AND ?
+                    ORDER BY sp.publish_at ASC
                 `).all(startDate, endDate);
             } else {
                 posts = db.prepare(`
-                    ${querySelect} ORDER BY publish_at ASC
+                    ${querySelect} ORDER BY sp.publish_at DESC
                 `).all();
             }
             return { success: true, data: posts };
@@ -677,11 +803,19 @@ export function registerIpcHandlers() {
 
     ipcMain.handle('update-scheduled-post', async (_event, { id, caption, date, automationId }) => {
         try {
+            let publishUtc = date;
+            try {
+                const parsed = new Date(date);
+                if (!isNaN(parsed.getTime())) publishUtc = parsed.toISOString();
+            } catch {
+                publishUtc = date;
+            }
+
             db.prepare(`
                 UPDATE scheduled_posts 
                 SET caption = ?, publish_at = ?, linked_flow_id = ?
                 WHERE id = ?
-            `).run(caption, date, automationId || null, id);
+            `).run(caption, publishUtc, automationId || null, id);
             return { success: true };
         } catch (error: any) {
             console.error('❌ Update Post Error:', error);

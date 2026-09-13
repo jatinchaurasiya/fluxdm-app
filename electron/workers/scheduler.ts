@@ -16,6 +16,8 @@ interface ScheduledPost {
   caption: string;
   linked_flow_id: string | null;
   media_type?: string;
+  status?: string;
+  error_message?: string;
 }
 
 /**
@@ -26,7 +28,7 @@ function getAccountForJob(job: ScheduledPost, config: any) {
   if (job.account_id) {
     account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(job.account_id);
   }
-  if (!account && config.active_account_id) {
+  if (!account && config?.active_account_id) {
     account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(config.active_account_id);
   }
   if (!account) {
@@ -39,7 +41,13 @@ function getAccountForJob(job: ScheduledPost, config: any) {
  * 📤 Meta Resumable Upload Protocol for Local Video Files
  * Streams video chunks directly from local disk to Meta's servers with $0 cloud bills.
  */
-async function uploadLocalVideoResumable(igUserId: string, filePath: string, caption: string, token: string): Promise<string | null> {
+async function uploadLocalVideoResumable(
+  igUserId: string,
+  filePath: string,
+  caption: string,
+  token: string,
+  mediaType: string = 'REELS'
+): Promise<{ containerId: string | null; error?: string }> {
   try {
     if (!fs.existsSync(filePath)) {
       throw new Error(`Local file not found at path: ${filePath}`);
@@ -50,13 +58,15 @@ async function uploadLocalVideoResumable(igUserId: string, filePath: string, cap
 
     console.log(`🎬 Initializing Meta Resumable Upload for ${path.basename(filePath)} (${(fileSize / (1024 * 1024)).toFixed(2)} MB)...`);
 
+    const igMediaType = mediaType.toUpperCase() === 'STORY' ? 'STORIES' : 'REELS';
+
     // STEP 1: Initialize Resumable Upload Session
     const initRes = await axios.post(
       `${BASE_URL}/${igUserId}/media`,
       null,
       {
         params: {
-          media_type: 'REELS',
+          media_type: igMediaType,
           upload_type: 'resumable',
           caption: caption || '',
           access_token: token
@@ -64,8 +74,8 @@ async function uploadLocalVideoResumable(igUserId: string, filePath: string, cap
       }
     );
 
-    const containerId = initRes.data.id;
-    const uploadUri = initRes.data.uri;
+    const containerId = initRes.data?.id;
+    const uploadUri = initRes.data?.uri;
 
     if (!uploadUri) {
       throw new Error('Meta did not return an upload URI for resumable transfer');
@@ -88,66 +98,83 @@ async function uploadLocalVideoResumable(igUserId: string, filePath: string, cap
     });
 
     console.log('✅ File bytes successfully uploaded to Meta servers!');
-    return containerId;
+    return { containerId };
   } catch (error: any) {
-    console.error('❌ Resumable Upload Error:', error.response?.data || error.message);
-    return null;
+    const errorDetails = error.response?.data?.error?.message || error.response?.data || error.message;
+    console.error('❌ Resumable Upload Error:', errorDetails);
+    return { containerId: null, error: typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails) };
   }
 }
 
 /**
  * 🌐 Create Container via Web URL (Fall-back when post is hosted remotely)
  */
-async function createContainerWithUrl(igUserId: string, mediaUrl: string, caption: string, token: string, isVideo: boolean = true) {
+async function createContainerWithUrl(
+  igUserId: string,
+  mediaUrl: string,
+  caption: string,
+  token: string,
+  isVideo: boolean = true,
+  mediaType: string = 'REELS'
+): Promise<{ containerId: string | null; error?: string }> {
   try {
     const params: any = {
       caption: caption || '',
       access_token: token
     };
 
+    const igMediaType = mediaType.toUpperCase() === 'STORY' ? 'STORIES' : 'REELS';
+
     if (isVideo) {
-      params.media_type = 'REELS';
+      params.media_type = igMediaType;
       params.video_url = mediaUrl;
     } else {
+      if (mediaType.toUpperCase() === 'STORY') {
+        params.media_type = 'STORIES';
+      }
       params.image_url = mediaUrl;
     }
 
     const res = await axios.post(`${BASE_URL}/${igUserId}/media`, null, { params });
-    return res.data.id;
+    return { containerId: res.data?.id };
   } catch (e: any) {
-    console.error('❌ Failed to create media container:', e.response?.data?.error?.message || e.message);
-    return null;
+    const errorMsg = e.response?.data?.error?.message || e.message;
+    console.error('❌ Failed to create media container:', errorMsg);
+    return { containerId: null, error: errorMsg };
   }
 }
 
 /**
  * ⏳ Poll Container Status until Meta encoding completes
  */
-async function waitForContainerFinished(containerId: string, token: string): Promise<boolean> {
+async function waitForContainerFinished(containerId: string, token: string): Promise<{ ready: boolean; error?: string }> {
   let attempts = 0;
-  while (attempts < 15) {
-    await new Promise(r => setTimeout(r, 6000)); // Poll every 6 seconds
+  while (attempts < 20) {
+    await new Promise(r => setTimeout(r, 5000)); // Poll every 5 seconds (up to 100 seconds)
     try {
-      const res = await axios.get(`${BASE_URL}/${containerId}?fields=status_code&access_token=${token}`);
-      const status = res.data.status_code;
+      const res = await axios.get(`${BASE_URL}/${containerId}?fields=status_code,status&access_token=${token}`);
+      const status = res.data?.status_code || res.data?.status;
 
-      if (status === 'FINISHED') return true;
+      console.log(`⏳ Container ${containerId} status: ${status} (attempt ${attempts + 1}/20)`);
+
+      if (status === 'FINISHED') return { ready: true };
       if (status === 'ERROR' || status === 'EXPIRED') {
-        console.error(`❌ Meta container encoding failed with status: ${status}`);
-        return false;
+        const errMsg = `Meta container encoding failed with status: ${status}`;
+        console.error(`❌ ${errMsg}`);
+        return { ready: false, error: errMsg };
       }
-    } catch {
-      // transient network error, retry
+    } catch (e: any) {
+      console.warn('⚠️ Transient status check error:', e.message);
     }
     attempts++;
   }
-  return false;
+  return { ready: false, error: 'Container encoding timed out on Meta servers (exceeded 100s)' };
 }
 
 /**
  * 🚀 Publish Media Container to Instagram
  */
-async function publishContainer(igUserId: string, containerId: string, token: string): Promise<string | null> {
+async function publishContainer(igUserId: string, containerId: string, token: string): Promise<{ mediaId: string | null; error?: string }> {
   try {
     const res = await axios.post(`${BASE_URL}/${igUserId}/media_publish`, null, {
       params: {
@@ -155,25 +182,31 @@ async function publishContainer(igUserId: string, containerId: string, token: st
         access_token: token
       }
     });
-    return res.data.id;
+    return { mediaId: res.data?.id };
   } catch (e: any) {
-    console.error('❌ Failed to publish container:', e.response?.data?.error?.message || e.message);
-    return null;
+    const errorMsg = e.response?.data?.error?.message || e.message;
+    console.error('❌ Failed to publish container:', errorMsg);
+    return { mediaId: null, error: errorMsg };
   }
 }
 
 /**
  * 🔄 Process Single Scheduled Post
  */
-async function processJob(job: ScheduledPost, config: any) {
+export async function processJob(job: ScheduledPost, config?: any): Promise<{ success: boolean; mediaId?: string; error?: string }> {
+  if (!config) {
+    config = db.prepare('SELECT * FROM user_config LIMIT 1').get() || {};
+  }
+
   const account = getAccountForJob(job, config);
-  const token = account?.access_token || config.access_token || config.meta_access_token;
-  const igUserId = account?.instagram_business_id || config.instagram_business_id;
+  const token = account?.access_token || config?.access_token || config?.meta_access_token;
+  const igUserId = account?.instagram_business_id || config?.instagram_business_id;
 
   if (!token || !igUserId) {
-    console.error('❌ Cannot process scheduled post: Missing access token or Instagram business ID');
-    db.prepare("UPDATE scheduled_posts SET status = 'FAILED' WHERE id = ?").run(job.id);
-    return;
+    const errorMsg = 'Cannot process scheduled post: Missing active Instagram account or access token.';
+    console.error('❌ ' + errorMsg);
+    db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(errorMsg, job.id);
+    return { success: false, error: errorMsg };
   }
 
   // Parse path or url
@@ -186,42 +219,81 @@ async function processJob(job: ScheduledPost, config: any) {
     targetPath = job.file_path;
   }
 
+  const rawType = (job.media_type || 'REEL').toUpperCase();
+  const lowerPath = (targetPath || '').toLowerCase();
+  const isVideo = lowerPath.endsWith('.mp4') || lowerPath.endsWith('.mov') || lowerPath.endsWith('.m4v') || lowerPath.endsWith('.webm') ||
+    ['VIDEO', 'REEL', 'REELS', 'STORY'].includes(rawType);
+
+  console.log(`🚀 Processing Post #${job.id} | Target: ${targetPath} | Type: ${rawType} | isVideo: ${isVideo}`);
+
   let containerId: string | null = null;
   const isLocalFile = fs.existsSync(targetPath);
-  const isVideo = targetPath.endsWith('.mp4') || targetPath.endsWith('.mov') || job.media_type === 'VIDEO' || job.media_type === 'REELS';
 
   if (isLocalFile && isVideo) {
-    containerId = await uploadLocalVideoResumable(igUserId, targetPath, job.caption, token);
+    const uploadRes = await uploadLocalVideoResumable(igUserId, targetPath, job.caption, token, rawType);
+    if (!uploadRes.containerId) {
+      const err = uploadRes.error || 'Resumable upload failed';
+      db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(err, job.id);
+      return { success: false, error: err };
+    }
+    containerId = uploadRes.containerId;
   } else {
-    containerId = await createContainerWithUrl(igUserId, targetPath, job.caption, token, isVideo);
-  }
-
-  if (!containerId) {
-    db.prepare("UPDATE scheduled_posts SET status = 'FAILED' WHERE id = ?").run(job.id);
-    return;
+    // If not local file or is image
+    const containerRes = await createContainerWithUrl(igUserId, targetPath, job.caption, token, isVideo, rawType);
+    if (!containerRes.containerId) {
+      const err = containerRes.error || 'Media container creation failed';
+      db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(err, job.id);
+      return { success: false, error: err };
+    }
+    containerId = containerRes.containerId;
   }
 
   // Poll for processing completion
-  const isReady = await waitForContainerFinished(containerId, token);
-  if (!isReady) {
-    db.prepare("UPDATE scheduled_posts SET status = 'FAILED' WHERE id = ?").run(job.id);
-    return;
+  const pollResult = await waitForContainerFinished(containerId, token);
+  if (!pollResult.ready) {
+    const err = pollResult.error || 'Container processing failed';
+    db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(err, job.id);
+    return { success: false, error: err };
   }
 
   // Publish
-  const mediaId = await publishContainer(igUserId, containerId, token);
+  const publishRes = await publishContainer(igUserId, containerId, token);
+  const mediaId = publishRes.mediaId;
 
   if (mediaId) {
-    db.prepare("UPDATE scheduled_posts SET status = 'PUBLISHED' WHERE id = ?").run(job.id);
-    console.log(`🎉 Successfully published scheduled post (Media ID: ${mediaId})!`);
+    db.prepare("UPDATE scheduled_posts SET status = 'PUBLISHED', error_message = NULL WHERE id = ?").run(job.id);
+    console.log(`🎉 Successfully published scheduled post #${job.id} (Instagram Media ID: ${mediaId})!`);
 
     // Auto-link newly published media to automation flow if specified
     if (job.linked_flow_id) {
       db.prepare(`UPDATE automation_flows SET attached_media_id = ? WHERE id = ?`).run(mediaId, job.linked_flow_id);
-      console.log(`🔗 Auto-attached Media ID ${mediaId} to flow ${job.linked_flow_id}`);
+      console.log(`🔗 Auto-attached Media ID ${mediaId} to automation flow ${job.linked_flow_id}`);
     }
+
+    return { success: true, mediaId };
   } else {
-    db.prepare("UPDATE scheduled_posts SET status = 'FAILED' WHERE id = ?").run(job.id);
+    const err = publishRes.error || 'Failed to publish container to Instagram feed';
+    db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(err, job.id);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * ⚡ Immediately process a scheduled post by ID on-demand (Publish Now)
+ */
+export async function processJobById(jobId: number): Promise<{ success: boolean; mediaId?: string; error?: string }> {
+  try {
+    const job = db.prepare('SELECT * FROM scheduled_posts WHERE id = ?').get(jobId) as ScheduledPost;
+    if (!job) {
+      return { success: false, error: `Post #${jobId} not found.` };
+    }
+
+    db.prepare("UPDATE scheduled_posts SET status = 'PROCESSING', error_message = NULL WHERE id = ?").run(jobId);
+    return await processJob(job);
+  } catch (e: any) {
+    console.error('❌ processJobById error:', e);
+    db.prepare("UPDATE scheduled_posts SET status = 'FAILED', error_message = ? WHERE id = ?").run(e.message, jobId);
+    return { success: false, error: e.message };
   }
 }
 
@@ -229,26 +301,28 @@ async function processJob(job: ScheduledPost, config: any) {
 // 🏁 SCHEDULER ENGINE
 // ------------------------------------------------------------------
 export async function startScheduler() {
-  console.log('📅 FluxDM Scheduler Initialized (1-minute intervals)');
+  console.log('📅 FluxDM Scheduler Engine Initialized (1-minute poll cycle)');
 
   cron.schedule('* * * * *', async () => {
     try {
+      // Query pending posts whose publish_at (in ISO UTC or standard SQLite) is <= current UTC time
       const pendingJobs = db.prepare(`
         SELECT * FROM scheduled_posts 
-        WHERE status = 'PENDING' AND publish_at <= datetime('now')
+        WHERE status = 'PENDING' AND datetime(publish_at) <= datetime('now')
       `).all() as ScheduledPost[];
 
-      if (pendingJobs.length === 0) return;
+      if (!pendingJobs || pendingJobs.length === 0) return;
+
+      console.log(`⏰ Scheduler triggered: ${pendingJobs.length} post(s) ready to publish.`);
 
       const config = db.prepare('SELECT * FROM user_config LIMIT 1').get() as any;
-      if (!config) return;
 
       for (const job of pendingJobs) {
         db.prepare("UPDATE scheduled_posts SET status = 'PROCESSING' WHERE id = ?").run(job.id);
         await processJob(job, config);
       }
     } catch (err) {
-      console.error('Scheduler loop error:', err);
+      console.error('❌ Scheduler cycle error:', err);
     }
   });
 }

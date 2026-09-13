@@ -144,6 +144,7 @@ export const initDB = () => {
   `).run();
   addColumnSafe('scheduled_posts', 'media_type', 'TEXT');
   addColumnSafe('scheduled_posts', 'account_id', 'INTEGER');
+  addColumnSafe('scheduled_posts', 'error_message', 'TEXT');
 
   // 4. Leads
   db.prepare(`
