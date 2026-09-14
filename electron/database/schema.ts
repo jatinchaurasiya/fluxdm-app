@@ -211,7 +211,29 @@ export const initDB = () => {
   `).run();
   addColumnSafe('logs', 'account_id', 'INTEGER');
 
-  // 8. Performance Indexes
+  // 8. Instagram Media Cache
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS instagram_media (
+      id TEXT PRIMARY KEY,
+      account_id INTEGER,
+      caption TEXT,
+      media_type TEXT,
+      media_url TEXT,
+      thumbnail_url TEXT,
+      permalink TEXT,
+      timestamp TEXT,
+      like_count INTEGER DEFAULT 0,
+      comments_count INTEGER DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  addColumnSafe('instagram_media', 'like_count', 'INTEGER DEFAULT 0');
+  addColumnSafe('instagram_media', 'comments_count', 'INTEGER DEFAULT 0');
+
+  // 9. Performance Indexes
+  // Instagram Media: Fast account-specific lookups
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_media_account ON instagram_media(account_id, timestamp DESC)`).run();
+
   // Message Queue: Critical for dashboard stats and polling
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_status ON message_queue(status)`).run();
   db.prepare(`CREATE INDEX IF NOT EXISTS idx_mq_execute_at ON message_queue(execute_at)`).run();

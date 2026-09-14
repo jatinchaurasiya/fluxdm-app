@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'path';
 import axios from 'axios';
 import db from './database/db';
-import { processJobById } from './workers/scheduler';
+import { processJobById, isDirectInstagramToken, getApiBase } from './workers/scheduler';
 import { randomUUID } from 'crypto';
 import { startOAuthServer } from './auth/server';
 import { 
@@ -431,43 +431,137 @@ export function registerIpcHandlers() {
     // ------------------------------------------------------------------------
     // 📸 INSTAGRAM MEDIA (Real Logic - Multi Account aware)
     // ------------------------------------------------------------------------
-    ipcMain.handle('get-ig-media', async () => {
-        const MOCK_MEDIA = [
-            { id: 'mock_1', caption: 'FluxDM Demo Post 1', media_type: 'IMAGE', thumbnail_url: '', media_url: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113', permalink: '#' },
-            { id: 'mock_2', caption: 'FluxDM Demo Post 2', media_type: 'VIDEO', thumbnail_url: 'https://images.unsplash.com/photo-1611162616475-46b635cb6868', media_url: '', permalink: '#' },
-            { id: 'mock_3', caption: 'Start Your Automation 🚀', media_type: 'CAROUSEL_ALBUM', thumbnail_url: '', media_url: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3', permalink: '#' },
-        ];
-
+    ipcMain.handle('get-ig-media', async (_event, options: { forceRefresh?: boolean; targetMediaId?: string } = {}) => {
         try {
+            // 1. Resolve Active Account
             const config = db.prepare('SELECT active_account_id FROM user_config LIMIT 1').get() as any;
-            if (!config?.active_account_id) return { success: false, error: 'No Active Account Selected.' };
-
-            const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(config.active_account_id) as any;
-
-            if (!account || !account.access_token || !account.instagram_business_id) {
-                console.warn("⚠️ Account record incomplete. Using Mock Data.");
-                return { success: true, data: MOCK_MEDIA };
+            let account: any = null;
+            if (config?.active_account_id) {
+                account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(config.active_account_id);
+            }
+            if (!account) {
+                account = db.prepare('SELECT * FROM accounts WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
+            }
+            if (!account) {
+                account = db.prepare('SELECT * FROM accounts ORDER BY id DESC LIMIT 1').get();
             }
 
-            const { access_token, instagram_business_id } = account;
-
-            // Check if this is a fallback fake ID
-            if (String(instagram_business_id).startsWith('fallback_')) {
-                console.warn("⚠️ Using Fallback Account. Returning Mock Media.");
-                return { success: true, data: MOCK_MEDIA };
+            if (!account || !account.access_token) {
+                return { 
+                    success: false, 
+                    error: 'No connected Instagram account found. Please connect your account in Connect Social.' 
+                };
             }
 
-            const API_VERSION = 'v18.0';
+            const accountId = account.id;
+            const token = account.access_token;
+            const isDirectIg = isDirectInstagramToken(token);
+            const apiBase = getApiBase(token);
+            const targetId = isDirectIg ? 'me' : (account.instagram_business_id || account.page_id || 'me');
 
-            const response = await axios.get(
-                `https://graph.facebook.com/${API_VERSION}/${instagram_business_id}/media?fields=id,caption,media_type,thumbnail_url,permalink,media_url&limit=24&access_token=${access_token}`
-            );
+            // 2. Check local SQLite cache first unless forceRefresh is true
+            const cachedMedia = db.prepare(`
+                SELECT * FROM instagram_media 
+                WHERE account_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT 50
+            `).all(accountId) as any[];
 
-            return { success: true, data: response.data.data };
+            if (cachedMedia && cachedMedia.length > 0 && !options.forceRefresh) {
+                if (options.targetMediaId && !cachedMedia.some((m: any) => m.id === options.targetMediaId)) {
+                    const specific = db.prepare('SELECT * FROM instagram_media WHERE id = ?').get(options.targetMediaId);
+                    if (specific) cachedMedia.unshift(specific);
+                }
+                return { success: true, data: cachedMedia, fromCache: true };
+            }
+
+            // 3. Fetch fresh media from Meta Graph API
+            console.log(`📸 Fetching live Instagram media for @${account.username} from ${apiBase}/${targetId}/media...`);
+            const fields = 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count';
+            const response = await axios.get(`${apiBase}/${targetId}/media`, {
+                params: {
+                    fields,
+                    limit: 50,
+                    access_token: token
+                },
+                timeout: 15000
+            });
+
+            const items = response.data?.data || [];
+            console.log(`✅ Retrieved ${items.length} live media items from Instagram for @${account.username}`);
+
+            // 4. Upsert into instagram_media cache table
+            const upsertStmt = db.prepare(`
+                INSERT INTO instagram_media (
+                    id, account_id, caption, media_type, media_url, thumbnail_url, permalink, timestamp, like_count, comments_count, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+                ) ON CONFLICT(id) DO UPDATE SET
+                    caption = excluded.caption,
+                    media_type = excluded.media_type,
+                    media_url = excluded.media_url,
+                    thumbnail_url = excluded.thumbnail_url,
+                    permalink = excluded.permalink,
+                    timestamp = excluded.timestamp,
+                    like_count = excluded.like_count,
+                    comments_count = excluded.comments_count,
+                    updated_at = CURRENT_TIMESTAMP
+            `);
+
+            const insertMany = db.transaction((mediaList: any[]) => {
+                for (const item of mediaList) {
+                    upsertStmt.run(
+                        String(item.id),
+                        accountId,
+                        item.caption || '',
+                        item.media_type || 'IMAGE',
+                        item.media_url || '',
+                        item.thumbnail_url || item.media_url || '',
+                        item.permalink || '',
+                        item.timestamp || new Date().toISOString(),
+                        item.like_count || 0,
+                        item.comments_count || 0
+                    );
+                }
+            });
+
+            insertMany(items);
+
+            // 5. Query and return fresh sorted media
+            const freshMedia = db.prepare(`
+                SELECT * FROM instagram_media 
+                WHERE account_id = ? 
+                ORDER BY timestamp DESC 
+                LIMIT 50
+            `).all(accountId) as any[];
+
+            if (options.targetMediaId && !freshMedia.some((m: any) => m.id === options.targetMediaId)) {
+                const specific = db.prepare('SELECT * FROM instagram_media WHERE id = ?').get(options.targetMediaId);
+                if (specific) freshMedia.unshift(specific);
+            }
+
+            return { success: true, data: freshMedia, fromCache: false };
+
         } catch (error: any) {
-            console.error('❌ IG Media Fetch Error (Using Mock Fallback):', error?.response?.data || error.message);
-            // Fallback to mock data if API fails (e.g. invalid tokens, permissions, or cross-connect issues)
-            return { success: true, data: MOCK_MEDIA };
+            const errorMsg = error?.response?.data?.error?.message || error.message;
+            console.error('❌ IG Media Fetch Error:', errorMsg);
+
+            // If we have cached items from previous fetches, return them with a warning
+            const fallbackCached = db.prepare(`
+                SELECT * FROM instagram_media 
+                ORDER BY timestamp DESC 
+                LIMIT 50
+            `).all();
+
+            if (fallbackCached && fallbackCached.length > 0) {
+                console.warn(`⚠️ Serving ${fallbackCached.length} cached posts due to API error.`);
+                return { success: true, data: fallbackCached, fromCache: true, warning: errorMsg };
+            }
+
+            return { 
+                success: false, 
+                error: `Failed to fetch Instagram posts: ${errorMsg}. Please ensure your token is valid or re-connect your account.` 
+            };
         }
     });
 
