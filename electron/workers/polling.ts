@@ -5,7 +5,18 @@ import axios from 'axios';
 import db from '../database/db';
 
 const API_VERSION = 'v18.0';
-const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
+
+function isDirectInstagramToken(token: string): boolean {
+  if (!token) return false;
+  return token.startsWith('IGAA') || token.startsWith('IGQV') || token.startsWith('IG');
+}
+
+function getGraphApiBase(token: string): string {
+  if (isDirectInstagramToken(token)) {
+    return `https://graph.instagram.com/${API_VERSION}`;
+  }
+  return `https://graph.facebook.com/${API_VERSION}`;
+}
 
 let lastPolledTime = Math.floor(Date.now() / 1000);
 
@@ -29,7 +40,8 @@ function getActiveAccount(config: any) {
  */
 async function checkUserFollowStatus(userId: string, token: string): Promise<boolean | null> {
   try {
-    const res = await axios.get(`${BASE_URL}/${userId}`, {
+    const apiBase = getGraphApiBase(token);
+    const res = await axios.get(`${apiBase}/${userId}`, {
       params: {
         fields: 'name,username,is_user_follow_business',
         access_token: token
@@ -59,12 +71,13 @@ async function runCommentLoop(config: any, account: any) {
     return;
   }
 
-  const targetId = igBusinessId || pageId;
+  const targetId = isDirectInstagramToken(token) ? 'me' : (igBusinessId || pageId);
 
   try {
+    const apiBase = getGraphApiBase(token);
     // 1. Fetch Recent Media with Comments
     const res = await axios.get(
-      `${BASE_URL}/${targetId}/media?fields=id,caption,comments.limit(15){id,text,timestamp,from{id,username},media{id}}&limit=10&access_token=${token}`
+      `${apiBase}/${targetId}/media?fields=id,caption,comments.limit(15){id,text,timestamp,from{id,username},media{id}}&limit=10&access_token=${token}`
     );
 
     const mediaItems = res.data.data || [];
@@ -201,11 +214,12 @@ async function runInboxLoop(config: any, account: any) {
   const igBusinessId = account?.instagram_business_id || config.instagram_business_id;
 
   if (!token || (!pageId && !igBusinessId)) return;
-  const targetId = pageId || igBusinessId;
+  const targetId = isDirectInstagramToken(token) ? 'me' : (pageId || igBusinessId);
 
   try {
+    const apiBase = getGraphApiBase(token);
     const res = await axios.get(
-      `${BASE_URL}/${targetId}/conversations?platform=instagram&fields=messages.limit(5){message,from,created_time}&limit=10&access_token=${token}`
+      `${apiBase}/${targetId}/conversations?platform=instagram&fields=messages.limit(5){message,from,created_time}&limit=10&access_token=${token}`
     );
 
     const conversations = res.data.data || [];
@@ -451,18 +465,19 @@ async function runMessageProcessor(config: any, account: any) {
   for (const task of pendingTasks) {
     try {
       const payload = JSON.parse(task.payload_json || '{}');
-      const senderTarget = igBusinessId || 'me';
+      const apiBase = getGraphApiBase(token);
+      const senderTarget = isDirectInstagramToken(token) ? 'me' : (igBusinessId || 'me');
 
       if (task.message_type === 'PRIVATE_REPLY' && task.comment_id) {
         // Meta Graph API Private Reply to Comment
-        const url = `${BASE_URL}/${task.comment_id}/private_replies`;
+        const url = `${apiBase}/${task.comment_id}/private_replies`;
         const body = { message: payload.text, access_token: token };
 
         try {
           await axios.post(url, body);
         } catch (privateErr: any) {
           // Fallback: direct send
-          const altUrl = `${BASE_URL}/${senderTarget}/messages`;
+          const altUrl = `${apiBase}/${senderTarget}/messages`;
           const altBody = {
             recipient: { comment_id: task.comment_id },
             message: { text: payload.text },
@@ -472,7 +487,7 @@ async function runMessageProcessor(config: any, account: any) {
         }
       } else {
         // Instagram Direct Message
-        const url = `${BASE_URL}/${senderTarget}/messages`;
+        const url = `${apiBase}/${senderTarget}/messages`;
         let body: any = {};
 
         // If buttons are present, use Meta Button Template

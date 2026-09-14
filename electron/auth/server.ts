@@ -203,6 +203,10 @@ export function startOAuthServer(
                                 },
                                 timeout: 8000
                             });
+                            if (profileRes.data?.id) {
+                                igBusinessId = String(profileRes.data.id);
+                                pageId = String(profileRes.data.id);
+                            }
                             userName = profileRes.data.username || profileRes.data.name || `ig_${igUserId}`;
                             profilePicture = profileRes.data.profile_picture_url || '';
                         } catch (e: any) {

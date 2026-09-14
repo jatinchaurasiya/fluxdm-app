@@ -28,7 +28,8 @@ import {
     Loader2,
     Zap,
     RefreshCw,
-    Sparkles
+    Sparkles,
+    ExternalLink
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -56,6 +57,7 @@ interface ScheduledPostItem {
     automation_id?: string;
     media_type?: string;
     error_message?: string;
+    permalink?: string;
     created_at?: string;
 }
 
@@ -382,7 +384,7 @@ export default function Scheduler() {
     // Immediate on-demand publish
     const handlePublishNow = async (jobId: number) => {
         setIsPublishingId(jobId);
-        const toastId = toast.loading('Publishing to Instagram via Meta Resumable Upload...');
+        const toastId = toast.loading('Publishing to Instagram...');
 
         try {
             const res = await (window as any).ipcRenderer.invoke('publish-scheduled-post-now', { id: jobId });
@@ -925,16 +927,29 @@ export default function Scheduler() {
 
                                     {/* Footer Actions */}
                                     <div className="p-4 pt-0 flex items-center justify-between border-t border-gray-100 dark:border-zinc-800/80 mt-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={isProcessing}
-                                            onClick={() => handlePublishNow(post.id)}
-                                            className="h-8 text-xs font-semibold text-pink-600 dark:text-pink-400 hover:bg-pink-500/10 gap-1.5 rounded-lg"
-                                        >
-                                            <Zap className="w-3.5 h-3.5" />
-                                            {isPublished ? 'Re-publish' : 'Publish Now'}
-                                        </Button>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={isProcessing}
+                                                onClick={() => handlePublishNow(post.id)}
+                                                className="h-8 text-xs font-semibold text-pink-600 dark:text-pink-400 hover:bg-pink-500/10 gap-1.5 rounded-lg"
+                                            >
+                                                <Zap className="w-3.5 h-3.5" />
+                                                {isPublished ? 'Re-publish' : 'Publish Now'}
+                                            </Button>
+
+                                            {post.permalink && (
+                                                <a
+                                                    href={post.permalink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-500 hover:text-blue-600 px-2 py-1 rounded-lg hover:bg-blue-500/10 transition-colors"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" /> View Live
+                                                </a>
+                                            )}
+                                        </div>
 
                                         <Button
                                             variant="ghost"
